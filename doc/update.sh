@@ -5,6 +5,27 @@
 # the mdoc man pages stored in each project.
 #
 
+USAGE="\n\
+Simple script to repopulate the 'doc' tree from\n\
+the mdoc man pages stored in each project.\n\
+\n\
+ -h, --help                  Display this help message\n\
+ --mediawiki                 Use mediawiki markup for wiki pages.\n"
+
+# Loop that parses options passed to script
+while [ "$#" -gt "0" ]; do
+  case "$1" in
+    --mediawiki)
+      USE_MEDIAWIKI=1
+      shift
+      ;;
+    -h|--help|*)
+      echo -e "${USAGE}"
+      exit 1
+      ;;
+  esac
+done
+
 # Collect list of man pages, relative to my subdirs
 test -d man || mkdir man
 cd man
@@ -80,7 +101,7 @@ for f in $MANPAGES; do
     outname="`basename $f`.html"
     echo >> Makefile
     echo $outname: $f >> Makefile
-    echo "	groff -mdoc2html $f > $outname" >> Makefile
+    echo "	groff -mdoc -T html $f > $outname" >> Makefile
     all="$all $outname"
 done
 echo $all >>Makefile
@@ -98,8 +119,13 @@ all="all:"
 for f in $MANPAGES; do
     outname="`basename $f | awk '{ac=split($0,a,"[_.-]");o="ManPage";for(w=0;w<=ac;++w){o=o toupper(substr(a[w],1,1)) substr(a[w],2)};print o}'`.wiki"
     echo >> Makefile
-    echo $outname: ../mdoc2wiki.awk $f >> Makefile
-    echo "	awk -f ../mdoc2wiki.awk < $f > $outname" >> Makefile
+    if [ -z "$USE_MEDIAWIKI" ]; then
+        echo $outname: ../mdoc2wiki.awk $f >> Makefile
+        echo "	awk -f ../mdoc2wiki.awk < $f > $outname" >> Makefile
+    else
+        echo $outname: ../mdoc2mediawiki.awk $f >> Makefile
+        echo "	awk -f ../mdoc2mediawiki.awk < $f > $outname" >> Makefile
+    fi
     all="$all $outname"
 done
 echo $all >>Makefile
@@ -113,5 +139,5 @@ cd ..
 (cd pdf && make)
 # Format all of the manpages to HTML
 (cd html && make)
-# Format all of the manpages to Google Wiki syntax
+# Format all of the manpages to wiki syntax
 (cd wiki && make)
