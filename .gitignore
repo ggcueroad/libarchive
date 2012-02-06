@@ -10,6 +10,8 @@ bsdcpio
 bsdcpio_test
 bsdtar
 bsdtar_test
+bsdpax
+bsdpax_test
 build/autoconf/compile
 build/autoconf/config.guess
 build/autoconf/config.sub
@@ -61,6 +63,11 @@ libarchive/CMakeFiles/
 libarchive/test/CMakeFiles/
 tar/CMakeFiles/
 tar/test/CMakeFiles/
+pax/.deps/
+pax/.dirstamp
+pax/test/.deps/
+pax/test/.dirstamp
+pax/test/list.h
 
 doc/html/*.html
 doc/man/*.1
