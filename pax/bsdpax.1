@@ -1,4 +1,4 @@
-.\" Copyright (c) 2011 Michihiro NAKAJIMA
+.\" Copyright (c) 2011-2012 Michihiro NAKAJIMA
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -24,7 +24,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd Dec 26, 2011
+.Dd Feb 7, 2012
 .Dt PAX 1
 .Os
 .Sh NAME
@@ -107,7 +107,7 @@ to tape drives, and usually not even then as the default block size of
 Do not process files or directories that match the
 specified patterns.
 .It Fl Fl compress , Fl Fl uncompress
-(Writew mode only)
+(Write mode only)
 Compress the resulting archive with
 .Xr compress 1 .
 In extract or list modes, this option is ignored.
@@ -116,7 +116,7 @@ Note that, unlike other
 implementations, this implementation recognizes compress compression
 automatically when reading archives.
 .It Fl D , Fl Fl keep-newer-ctime-files
-(Copy mode only)
+(Read and Copy mode only)
 Do not overwrite existing files unless files and directories are newer than.
 This compares ctime entries before any pathname modifications.
 .It Fl d , Fl Fl norecurse , Fl Fl no-recursion
@@ -134,8 +134,9 @@ Select file entries based on its
 name.
 Multiple
 .Fl G
-options may be supplied.
-(Need more description.)
+options may be supplied. You can specify
+.Pa group
+id with # prefix.
 .It Fl H
 (Write and Copy mode only)
 Symbolic links named on the command line will be followed; the
@@ -173,7 +174,7 @@ Note that, unlike other
 implementations, this implementation recognizes XZ compression
 automatically when reading archives.
 .It Fl j , Fl Fl bzip , Fl Fl bzip2 , Fl Fl bunzip2
-(Writew mode only)
+(Write mode only)
 Compress the resulting archive with
 .Xr bzip2 1 .
 In extract or list modes, this option is ignored.
@@ -366,7 +367,7 @@ Preserve uid and gid.
 .It Cm p
 xxx.
 .El
-(Need description.)
+(Need more description.)
 .It Fl s Ar pattern
 Modify file or archive member names according to
 .Pa pattern .
@@ -409,15 +410,16 @@ Pathnames with fewer elements will be silently skipped.
 Note that the pathname is edited after checking inclusion/exclusion patterns
 but before security checks.
 .It Fl T Ar [from_date] Ar [,to_date] Ar [/[c][m]]
-(Need description.)
+(Need more description.)
 .It Fl U Ar [#]user
 Select file entries based on its
 .Pa user
 name.
 Multiple
 .Fl U
-options may be supplied.
-(Need more description.)
+options may be supplied. You can specify
+.Pa user
+id with # prefix.
 .It Fl u , Fl Fl keep-newer-mtime-files
 Do not overwrite existing files unless files and directories are newer than.
 This compares ctime entries before any pathname modifications.
@@ -462,7 +464,7 @@ for more information about currently-supported formats.
 In r and u modes, when extending an existing archive, the format specified
 here must be compatible with the format of the existing archive on disk.
 .It Fl Y , Fl Fl keep-newer-ctime-files2
-(Copy mode only)
+(Read and Copy mode only)
 Like
 .Fl Fl keep-newer-ctime-files
 , except this is checked after all the pathname modifications have completed.
