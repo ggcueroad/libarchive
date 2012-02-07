@@ -689,7 +689,7 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 	char *s = strdup(opt);
 	char *p;
 	time_t t;
-	int flag;
+	int flag, mf;
 #define USE_MTIME	1
 #define USE_CTIME	2
 
@@ -714,12 +714,16 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 		/* Parse 'to date'. */
 		*p++ = '\0';
 		t = get_date(now, p);
+		mf = 0;
 		if (flag & USE_MTIME)
-			archive_matching_older_mtime(bsdpax->matching, t,
-			    LONG_MAX);
+			mf |= ARCHIVE_MATCHING_MTIME;
 		if (flag & USE_CTIME)
-			archive_matching_older_ctime(bsdpax->matching, t,
-			    LONG_MAX);
+			mf |= ARCHIVE_MATCHING_CTIME;
+		if (t != (time_t)-1 && mf) {
+			mf |= ARCHIVE_MATCHING_OLDER | ARCHIVE_MATCHING_EQUAL;
+			archive_matching_include_time(bsdpax->matching,
+			    mf, t, 0);
+		}
 	}
 	p = s;
 	while (*p == ' ' || *p == '\t')
@@ -727,10 +731,16 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 	if (strlen(p) > 0) {
 		/* Parse 'from date'. */
 		t = get_date(now, p);
+		mf = 0;
 		if (flag & USE_MTIME)
-			archive_matching_newer_mtime(bsdpax->matching, t, -1);
+			mf |= ARCHIVE_MATCHING_MTIME;
 		if (flag & USE_CTIME)
-			archive_matching_newer_ctime(bsdpax->matching, t, -1);
+			mf |= ARCHIVE_MATCHING_CTIME;
+		if (t != (time_t)-1 && mf) {
+			mf |= ARCHIVE_MATCHING_NEWER | ARCHIVE_MATCHING_EQUAL;
+			archive_matching_include_time(bsdpax->matching,
+			    mf, t, 0);
+		}
 	}
 	free(s);
 }
