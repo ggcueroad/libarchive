@@ -23,16 +23,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "test.h"
-__FBSDID("$FreeBSD: src/usr.bin/tar/test/test_getdate.c,v 1.2 2008/05/26 17:10:10 kientzle Exp $");
+__FBSDID("$FreeBSD$");
 
 #include <time.h>
-#include "getdate.h"
 
 /*
  * Verify that the getdate() function works.
  */
 
-DEFINE_TEST(test_getdate)
+time_t __archive_get_date(time_t, const char *);
+#define get_date __archive_get_date
+
+DEFINE_TEST(test_archive_getdate)
 {
 	time_t now = time(NULL);
 

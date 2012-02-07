@@ -105,6 +105,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_entry_stat.c				\
 	libarchive/archive_entry_strmode.c			\
 	libarchive/archive_entry_xattr.c			\
+	libarchive/archive_getdate.c				\
 	libarchive/archive_matching.c				\
 	libarchive/archive_options.c				\
 	libarchive/archive_options_private.h			\
@@ -261,6 +262,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_archive_api_feature.c		\
 	libarchive/test/test_archive_clear_error.c		\
 	libarchive/test/test_archive_crypto.c			\
+	libarchive/test/test_archive_getdate.c			\
 	libarchive/test/test_archive_matching_owner.c		\
 	libarchive/test/test_archive_matching_path.c		\
 	libarchive/test/test_archive_matching_time.c		\
@@ -657,7 +659,6 @@ bsdtar_test_SOURCES=						\
 	tar/test/test_basic.c					\
 	tar/test/test_copy.c					\
 	tar/test/test_empty_mtree.c				\
-	tar/test/test_getdate.c					\
 	tar/test/test_help.c					\
 	tar/test/test_option_C_upper.c				\
 	tar/test/test_option_H_upper.c				\

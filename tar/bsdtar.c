@@ -138,7 +138,6 @@ main(int argc, char **argv)
 	char			 option_o;
 	char			 possible_help_request;
 	char			 buff[16];
-	time_t			 now;
 
 	/*
 	 * Use a pointer for consistency, but stack-allocated storage
@@ -189,8 +188,6 @@ main(int argc, char **argv)
 		else
 			lafe_progname = *argv;
 	}
-
-	time(&now);
 
 #if HAVE_SETLOCALE
 	if (setlocale(LC_ALL, "") == NULL)
@@ -398,25 +395,31 @@ main(int argc, char **argv)
 		 * TODO: Add corresponding "older" options to reverse these.
 		 */
 		case OPTION_NEWER_CTIME: /* GNU tar */
-			if (archive_matching_newer_ctime(bsdtar->matching,
-			    get_date(now, bsdtar->argument), 0) != ARCHIVE_OK)
+			if (archive_matching_include_date(bsdtar->matching,
+			    ARCHIVE_MATCHING_CTIME | ARCHIVE_MATCHING_NEWER,
+			    bsdtar->argument) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdtar->matching));
 			break;
 		case OPTION_NEWER_CTIME_THAN:
-			if (archive_matching_newer_ctime_than(bsdtar->matching,
+			if (archive_matching_include_time_pathname(
+			    bsdtar->matching,
+			    ARCHIVE_MATCHING_CTIME | ARCHIVE_MATCHING_NEWER,
 			    bsdtar->argument) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdtar->matching));
 			break;
 		case OPTION_NEWER_MTIME: /* GNU tar */
-			if (archive_matching_newer_mtime(bsdtar->matching,
-			    get_date(now, bsdtar->argument), 0) != ARCHIVE_OK)
+			if (archive_matching_include_date(bsdtar->matching,
+			    ARCHIVE_MATCHING_MTIME | ARCHIVE_MATCHING_NEWER,
+			    bsdtar->argument) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdtar->matching));
 			break;
 		case OPTION_NEWER_MTIME_THAN:
-			if (archive_matching_newer_mtime_than(bsdtar->matching,
+			if (archive_matching_include_time_pathname(
+			    bsdtar->matching,
+			    ARCHIVE_MATCHING_MTIME | ARCHIVE_MATCHING_NEWER,
 			    bsdtar->argument) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdtar->matching));
