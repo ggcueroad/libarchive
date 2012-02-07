@@ -226,7 +226,7 @@ main(int argc, char **argv)
 	if (getenv(COPYFILE_DISABLE_VAR))
 		bsdpax->readdisk_flags &= ~ARCHIVE_READDISK_MAC_COPYFILE;
 #endif
-	bsdpax->matching = archive_matching_new();
+	bsdpax->matching = archive_match_new();
 	if (bsdpax->matching == NULL)
 		lafe_errc(1, 0, "Out of memory");
 
@@ -530,7 +530,7 @@ main(int argc, char **argv)
 		break;
 	}
 
-	archive_matching_free(bsdpax->matching);
+	archive_match_free(bsdpax->matching);
 #if HAVE_REGEX_H
 	cleanup_substitution(bsdpax);
 #endif
@@ -716,13 +716,12 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 		t = get_date(now, p);
 		mf = 0;
 		if (flag & USE_MTIME)
-			mf |= ARCHIVE_MATCHING_MTIME;
+			mf |= ARCHIVE_MATCH_MTIME;
 		if (flag & USE_CTIME)
-			mf |= ARCHIVE_MATCHING_CTIME;
+			mf |= ARCHIVE_MATCH_CTIME;
 		if (t != (time_t)-1 && mf) {
-			mf |= ARCHIVE_MATCHING_OLDER | ARCHIVE_MATCHING_EQUAL;
-			archive_matching_include_time(bsdpax->matching,
-			    mf, t, 0);
+			mf |= ARCHIVE_MATCH_OLDER | ARCHIVE_MATCH_EQUAL;
+			archive_match_include_time(bsdpax->matching, mf, t, 0);
 		}
 	}
 	p = s;
@@ -733,13 +732,12 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 		t = get_date(now, p);
 		mf = 0;
 		if (flag & USE_MTIME)
-			mf |= ARCHIVE_MATCHING_MTIME;
+			mf |= ARCHIVE_MATCH_MTIME;
 		if (flag & USE_CTIME)
-			mf |= ARCHIVE_MATCHING_CTIME;
+			mf |= ARCHIVE_MATCH_CTIME;
 		if (t != (time_t)-1 && mf) {
-			mf |= ARCHIVE_MATCHING_NEWER | ARCHIVE_MATCHING_EQUAL;
-			archive_matching_include_time(bsdpax->matching,
-			    mf, t, 0);
+			mf |= ARCHIVE_MATCH_NEWER | ARCHIVE_MATCH_EQUAL;
+			archive_match_include_time(bsdpax->matching, mf, t, 0);
 		}
 	}
 	free(s);

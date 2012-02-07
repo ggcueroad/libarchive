@@ -195,7 +195,7 @@ pax_mode_write(struct bsdpax *bsdpax)
 	}
 
 	if (bsdpax->option_keep_newer_mtime_files_ar) {
-		bsdpax->matching2 = archive_matching_new();
+		bsdpax->matching2 = archive_match_new();
 		if (bsdpax->matching2 == NULL)
 			lafe_errc(1, 0, "Out of memory");
 	}
@@ -204,7 +204,7 @@ pax_mode_write(struct bsdpax *bsdpax)
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 	write_archive(a, bsdpax);
 	if (bsdpax->matching2 != NULL) {
-		archive_matching_free(bsdpax->matching2);
+		archive_match_free(bsdpax->matching2);
 		bsdpax->matching2 = NULL;
 	}
 }
@@ -239,7 +239,7 @@ pax_mode_append(struct bsdpax *bsdpax)
 	}
 
 	if (bsdpax->option_keep_newer_mtime_files_ar) {
-		bsdpax->matching2 = archive_matching_new();
+		bsdpax->matching2 = archive_match_new();
 		if (bsdpax->matching2 == NULL)
 			lafe_errc(1, 0, "Out of memory");
 	}
@@ -252,19 +252,19 @@ pax_mode_append(struct bsdpax *bsdpax)
 			    "Cannot append to compressed archive.");
 		}
 		if (bsdpax->option_keep_newer_mtime_files_br) {
-			if (archive_matching_exclude_entry(
+			if (archive_match_exclude_entry(
 			    bsdpax->matching,
-			    ARCHIVE_MATCHING_MTIME |
-			    ARCHIVE_MATCHING_OLDER | ARCHIVE_MATCHING_EQUAL,
+			    ARCHIVE_MATCH_MTIME |
+			    ARCHIVE_MATCH_OLDER | ARCHIVE_MATCH_EQUAL,
 			    entry) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdpax->matching));
 		}
 		if (bsdpax->option_keep_newer_mtime_files_ar) {
-			if (archive_matching_exclude_entry(
+			if (archive_match_exclude_entry(
 			    bsdpax->matching2,
-			    ARCHIVE_MATCHING_MTIME |
-			    ARCHIVE_MATCHING_OLDER | ARCHIVE_MATCHING_EQUAL,
+			    ARCHIVE_MATCH_MTIME |
+			    ARCHIVE_MATCH_OLDER | ARCHIVE_MATCH_EQUAL,
 			    entry) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdpax->matching2));
@@ -292,7 +292,7 @@ pax_mode_append(struct bsdpax *bsdpax)
 	write_archive(a, bsdpax);
 
 	if (bsdpax->matching2 != NULL) {
-		archive_matching_free(bsdpax->matching2);
+		archive_match_free(bsdpax->matching2);
 		bsdpax->matching2 = NULL;
 	}
 	close(bsdpax->fd);
@@ -471,7 +471,7 @@ append_archive(struct bsdpax *bsdpax, struct archive *a, struct archive *ina)
 		/*
 		 * Exclude entries that are specified.
 		 */
-		if (archive_matching_excluded(bsdpax->matching, in_entry))
+		if (archive_match_excluded(bsdpax->matching, in_entry))
 			continue;/* Skip it. */
 
 		if (bsdpax->option_interactive) {
@@ -487,7 +487,7 @@ append_archive(struct bsdpax *bsdpax, struct archive *a, struct archive *ina)
 		 * has the same name. (-Z option.)
 		 */
 		if (bsdpax->option_keep_newer_mtime_files_ar &&
-		    archive_matching_time_excluded(bsdpax->matching2, in_entry))
+		    archive_match_time_excluded(bsdpax->matching2, in_entry))
 			continue;
 
 		if (bsdpax->verbose)
@@ -613,7 +613,7 @@ write_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 		 * has the same name. (-Z options)
 		 */
 		if (bsdpax->option_keep_newer_mtime_files_ar &&
-		    archive_matching_time_excluded(bsdpax->matching2, entry))
+		    archive_match_time_excluded(bsdpax->matching2, entry))
 			continue;
 
 		/* Note: if user vetoes, we won't descend. */
@@ -623,19 +623,19 @@ write_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 
 		/* Update timestamps archived in the archive file. */ 
 		if (bsdpax->option_keep_newer_mtime_files_br) {
-			if (archive_matching_exclude_entry(
+			if (archive_match_exclude_entry(
 			    bsdpax->matching,
-			    ARCHIVE_MATCHING_MTIME |
-			    ARCHIVE_MATCHING_OLDER | ARCHIVE_MATCHING_EQUAL,
+			    ARCHIVE_MATCH_MTIME |
+			    ARCHIVE_MATCH_OLDER | ARCHIVE_MATCH_EQUAL,
 			    entry) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdpax->matching));
 		}
 		if (bsdpax->option_keep_newer_mtime_files_ar) {
-			if (archive_matching_exclude_entry(
+			if (archive_match_exclude_entry(
 			    bsdpax->matching2,
-			    ARCHIVE_MATCHING_MTIME |
-			    ARCHIVE_MATCHING_OLDER | ARCHIVE_MATCHING_EQUAL,
+			    ARCHIVE_MATCH_MTIME |
+			    ARCHIVE_MATCH_OLDER | ARCHIVE_MATCH_EQUAL,
 			    entry) != ARCHIVE_OK)
 				lafe_errc(1, 0, "Error : %s",
 				    archive_error_string(bsdpax->matching2));

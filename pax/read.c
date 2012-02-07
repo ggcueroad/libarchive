@@ -160,10 +160,10 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 
 	while (*bsdpax->argv) {
 		if (bsdpax->option_exclude)
-			r = archive_matching_exclude_pattern(bsdpax->matching,
+			r = archive_match_exclude_pattern(bsdpax->matching,
 			    *bsdpax->argv);
 		else
-			r = archive_matching_include_pattern(bsdpax->matching,
+			r = archive_match_include_pattern(bsdpax->matching,
 			    *bsdpax->argv);
 		if (r != ARCHIVE_OK)
 			lafe_errc(1, 0, "Error : %s",
@@ -210,7 +210,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 	for (;;) {
 		/* Support --fast-read option */
 		if (bsdpax->option_fast_read &&
-		    archive_matching_path_unmatched_inclusions(
+		    archive_match_path_unmatched_inclusions(
 		      bsdpax->matching) == 0)
 			break;
 
@@ -239,7 +239,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 		 * rewrite, there would be no way to exclude foo1/bar
 		 * while allowing foo2/bar.)
 		 */
-		if (archive_matching_excluded(bsdpax->matching, entry))
+		if (archive_match_excluded(bsdpax->matching, entry))
 			continue; /* Excluded by a pattern test. */
 
 		if (mode == PAXMODE_LIST) {
@@ -490,12 +490,12 @@ unmatched_inclusions_warn(struct archive *matching, const char *msg)
 	if (matching == NULL)
 		return (0);
 
-	while ((r = archive_matching_path_unmatched_inclusions_next(
+	while ((r = archive_match_path_unmatched_inclusions_next(
 	    matching, &p)) == ARCHIVE_OK)
 		lafe_warnc(0, "%s: %s", p, msg);
 	if (r == ARCHIVE_FATAL)
 		lafe_errc(1, errno, "Out of memory");
 
-	return (archive_matching_path_unmatched_inclusions(matching));
+	return (archive_match_path_unmatched_inclusions(matching));
 }
 

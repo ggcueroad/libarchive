@@ -573,11 +573,11 @@ add_user(struct bsdpax *bsdpax, const char *user)
 		id = atoi(user+1);
 		if (id < 0)
 			return (-1);
-		r = archive_matching_include_uid(bsdpax->matching, id);
+		r = archive_match_include_uid(bsdpax->matching, id);
 	} else if (user[0] == '\\' && user[1] == '#')
-		r = archive_matching_include_uname(bsdpax->matching, user+1);
+		r = archive_match_include_uname(bsdpax->matching, user+1);
 	else
-		r = archive_matching_include_uname(bsdpax->matching, user);
+		r = archive_match_include_uname(bsdpax->matching, user);
 	return (r);
 }
 
@@ -590,11 +590,11 @@ add_group(struct bsdpax *bsdpax, const char *group)
 		id = atoi(group+1);
 		if (id < 0)
 			return (-1);
-		r = archive_matching_include_gid(bsdpax->matching, id);
+		r = archive_match_include_gid(bsdpax->matching, id);
 	} else if (group[0] == '\\' && group[1] == '#')
-		r = archive_matching_include_gname(bsdpax->matching, group+1);
+		r = archive_match_include_gname(bsdpax->matching, group+1);
 	else
-		r = archive_matching_include_gname(bsdpax->matching, group);
+		r = archive_match_include_gname(bsdpax->matching, group);
 	return (r);
 }
 
