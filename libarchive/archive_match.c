@@ -117,8 +117,8 @@ struct archive_match {
 	/*
 	 * Matching time stamps with its filename.
 	 */
-	struct archive_rb_tree	 newer_tree;
-	struct entry_list 	 entry_list;
+	struct archive_rb_tree	 exclusion_tree;
+	struct entry_list 	 exclusion_entry_list;
 
 	/*
 	 * Matching file owners.
@@ -175,8 +175,9 @@ static int	set_timefilter_pathname_mbs(struct archive_match *,
 		    int, const char *);
 static int	set_timefilter_pathname_wcs(struct archive_match *,
 		    int, const wchar_t *);
-static int	set_time_str(struct archive_match *, int, const char *);
-static int	set_time_str_w(struct archive_match *, int, const wchar_t *);
+static int	set_timefilter_date(struct archive_match *, int, const char *);
+static int	set_timefilter_date_w(struct archive_match *, int,
+		    const wchar_t *);
 static int	time_excluded(struct archive_match *,
 		    struct archive_entry *);
 static int	validate_time_flag(struct archive *, int, const char *);
@@ -207,6 +208,9 @@ error_nomem(struct archive_match *a)
 	return (ARCHIVE_FATAL);
 }
 
+/*
+ * Create an ARCHIVE_MATCH object.
+ */
 struct archive *
 archive_match_new(void)
 {
@@ -219,14 +223,17 @@ archive_match_new(void)
 	a->archive.state = ARCHIVE_STATE_NEW;
 	match_list_init(&(a->inclusions));
 	match_list_init(&(a->exclusions));
-	__archive_rb_tree_init(&(a->newer_tree), &rb_ops_mbs);
-	entry_list_init(&(a->entry_list));
+	__archive_rb_tree_init(&(a->exclusion_tree), &rb_ops_mbs);
+	entry_list_init(&(a->exclusion_entry_list));
 	match_list_init(&(a->inclusion_unames));
 	match_list_init(&(a->inclusion_gnames));
 	time(&a->now);
 	return (&(a->archive));
 }
 
+/*
+ * Free an ARCHIVE_MATCH object.
+ */
 int
 archive_match_free(struct archive *_a)
 {
@@ -239,7 +246,7 @@ archive_match_free(struct archive *_a)
 	a = (struct archive_match *)_a;
 	match_list_free(&(a->inclusions));
 	match_list_free(&(a->exclusions));
-	entry_list_free(&(a->entry_list));
+	entry_list_free(&(a->exclusion_entry_list));
 	free(a->inclusion_uids.ids);
 	free(a->inclusion_gids.ids);
 	match_list_free(&(a->inclusion_unames));
@@ -454,6 +461,9 @@ archive_match_path_unmatched_inclusions_next_w(struct archive *_a,
 	return (r);
 }
 
+/*
+ * Add inclusion/exclusion patterns.
+ */
 static int
 add_pattern_mbs(struct archive_match *a, struct match_list *list,
     const char *pattern)
@@ -494,6 +504,9 @@ add_pattern_wcs(struct archive_match *a, struct match_list *list,
 	return (ARCHIVE_OK);
 }
 
+/*
+ * Test if pathname is excluded by inclusion/exclusion patterns.
+ */
 static int
 path_excluded(struct archive_match *a, int mbs, const void *pathname)
 {
@@ -720,7 +733,7 @@ archive_match_include_date(struct archive *_a, int flag,
 	r = validate_time_flag(_a, flag, "archive_match_include_date");
 	if (r != ARCHIVE_OK)
 		return (r);
-	return set_time_str((struct archive_match *)_a, flag, datestr);
+	return set_timefilter_date((struct archive_match *)_a, flag, datestr);
 }
 
 int
@@ -733,7 +746,7 @@ archive_match_include_date_w(struct archive *_a, int flag,
 	if (r != ARCHIVE_OK)
 		return (r);
 
-	return set_time_str_w((struct archive_match *)_a, flag, datestr);
+	return set_timefilter_date_w((struct archive_match *)_a, flag, datestr);
 }
 
 int
@@ -881,27 +894,28 @@ set_timefilter(struct archive_match *a, int timetype,
 }
 
 static int
-set_time_str(struct archive_match *a, int timetype, const char *datestr)
+set_timefilter_date(struct archive_match *a, int timetype, const char *datestr)
 {
-	time_t time;
+	time_t t;
 
 	if (datestr == NULL || *datestr == '\0') {
 		archive_set_error(&(a->archive), EINVAL, "date is empty");
 		return (ARCHIVE_FAILED);
 	}
-	time = get_date(a->now, datestr);
-	if (time == (time_t)-1) {
+	t = get_date(a->now, datestr);
+	if (t == (time_t)-1) {
 		archive_set_error(&(a->archive), EINVAL, "invalid date string");
 		return (ARCHIVE_FAILED);
 	}
-	return set_timefilter(a, timetype, time, 0, time, 0);
+	return set_timefilter(a, timetype, t, 0, t, 0);
 }
 
 static int
-set_time_str_w(struct archive_match *a, int timetype, const wchar_t *datestr)
+set_timefilter_date_w(struct archive_match *a, int timetype,
+    const wchar_t *datestr)
 {
 	struct archive_string as;
-	time_t time;
+	time_t t;
 
 	if (datestr == NULL || *datestr == L'\0') {
 		archive_set_error(&(a->archive), EINVAL, "date is empty");
@@ -917,13 +931,13 @@ set_time_str_w(struct archive_match *a, int timetype, const wchar_t *datestr)
 		    "Failed to convert WCS to MBS");
 		return (ARCHIVE_FAILED);
 	}
-	time = get_date(a->now, as.s);
+	t = get_date(a->now, as.s);
 	archive_string_free(&as);
-	if (time == (time_t)-1) {
+	if (t == (time_t)-1) {
 		archive_set_error(&(a->archive), EINVAL, "invalid date string");
 		return (ARCHIVE_FAILED);
 	}
-	return set_timefilter(a, timetype, time, 0, time, 0);
+	return set_timefilter(a, timetype, t, 0, t, 0);
 }
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -959,32 +973,11 @@ set_timefilter_find_data(struct archive_match *a, int timetype,
 	}
 	return set_timefilter(a, timetype, mtime, mtime_ns, ctime, ctime_ns);
 }
-#else
-static int
-set_timefilter_stat(struct archive_match *a, int timetype, struct stat *st)
-{
-	struct archive_entry *ae;
-	time_t ctime, mtime;
-	long ctime_ns, mtime_ns;
-
-	ae = archive_entry_new();
-	if (ae == NULL)
-		return (error_nomem(a));
-	archive_entry_copy_stat(ae, st);
-	ctime = archive_entry_ctime(ae);
-	ctime_ns = archive_entry_ctime_nsec(ae);
-	mtime = archive_entry_mtime(ae);
-	mtime_ns = archive_entry_mtime_nsec(ae);
-	archive_entry_free(ae);
-	return set_timefilter(a, timetype, mtime, mtime_ns, ctime, ctime_ns);
-}
-#endif
 
 static int
 set_timefilter_pathname_mbs(struct archive_match *a, int timetype,
     const char *path)
 {
-#if defined(_WIN32) && !defined(__CYGWIN__)
 	/* NOTE: stat() on Windows cannot handle nano seconds. */
 	HANDLE h;
 	WIN32_FIND_DATA d;
@@ -1004,26 +997,12 @@ set_timefilter_pathname_mbs(struct archive_match *a, int timetype,
 	return set_timefilter_find_data(a, timetype,
 	    d.ftLastWriteTime.dwHighDateTime, d.ftLastWriteTime.dwLowDateTime,
 	    d.ftCreationTime.dwHighDateTime, d.ftCreationTime.dwLowDateTime);
-#else
-	struct stat st;
-
-	if (path == NULL || *path == '\0') {
-		archive_set_error(&(a->archive), EINVAL, "pathname is empty");
-		return (ARCHIVE_FAILED);
-	}
-	if (stat(path, &st) != 0) {
-		archive_set_error(&(a->archive), errno, "Failed to stat()");
-		return (ARCHIVE_FAILED);
-	}
-	return (set_timefilter_stat(a, timetype, &st));
-#endif
 }
 
 static int
 set_timefilter_pathname_wcs(struct archive_match *a, int timetype,
     const wchar_t *path)
 {
-#if defined(_WIN32) && !defined(__CYGWIN__)
 	HANDLE h;
 	WIN32_FIND_DATAW d;
 
@@ -1042,14 +1021,60 @@ set_timefilter_pathname_wcs(struct archive_match *a, int timetype,
 	return set_timefilter_find_data(a, timetype,
 	    d.ftLastWriteTime.dwHighDateTime, d.ftLastWriteTime.dwLowDateTime,
 	    d.ftCreationTime.dwHighDateTime, d.ftCreationTime.dwLowDateTime);
-#else
+}
+
+#else /* _WIN32 && !__CYGWIN__ */
+
+static int
+set_timefilter_stat(struct archive_match *a, int timetype, struct stat *st)
+{
+	struct archive_entry *ae;
+	time_t ctime_sec, mtime_sec;
+	long ctime_ns, mtime_ns;
+
+	ae = archive_entry_new();
+	if (ae == NULL)
+		return (error_nomem(a));
+	archive_entry_copy_stat(ae, st);
+	ctime_sec = archive_entry_ctime(ae);
+	ctime_ns = archive_entry_ctime_nsec(ae);
+	mtime_sec = archive_entry_mtime(ae);
+	mtime_ns = archive_entry_mtime_nsec(ae);
+	archive_entry_free(ae);
+	return set_timefilter(a, timetype, mtime_sec, mtime_ns,
+			ctime_sec, ctime_ns);
+}
+
+static int
+set_timefilter_pathname_mbs(struct archive_match *a, int timetype,
+    const char *path)
+{
 	struct stat st;
+
+	if (path == NULL || *path == '\0') {
+		archive_set_error(&(a->archive), EINVAL, "pathname is empty");
+		return (ARCHIVE_FAILED);
+	}
+	if (stat(path, &st) != 0) {
+		archive_set_error(&(a->archive), errno, "Failed to stat()");
+		return (ARCHIVE_FAILED);
+	}
+	return (set_timefilter_stat(a, timetype, &st));
+}
+
+static int
+set_timefilter_pathname_wcs(struct archive_match *a, int timetype,
+    const wchar_t *path)
+{
 	struct archive_string as;
+	int r;
 
 	if (path == NULL || *path == L'\0') {
 		archive_set_error(&(a->archive), EINVAL, "pathname is empty");
 		return (ARCHIVE_FAILED);
 	}
+
+	/* Convert WCS filename to MBS filename. */
 	archive_string_init(&as);
 	if (archive_string_append_from_wcs(&as, path, wcslen(path)) < 0) {
 		archive_string_free(&as);
@@ -1059,22 +1084,23 @@ set_timefilter_pathname_wcs(struct archive_match *a, int timetype,
 		    "Failed to convert WCS to MBS");
 		return (ARCHIVE_FAILED);
 	}
-	if (stat(as.s, &st) != 0) {
-		archive_set_error(&(a->archive), errno, "Failed to stat()");
-		archive_string_free(&as);
-		return (ARCHIVE_FAILED);
-	}
-	archive_string_free(&as);
-	return (set_timefilter_stat(a, timetype, &st));
-#endif
-}
 
+	r = set_timefilter_pathname_mbs(a, timetype, as.s);
+	archive_string_free(&as);
+
+	return (r);
+}
+#endif /* _WIN32 && !__CYGWIN__ */
+
+/*
+ * Call back funtions for archive_rb.
+ */
 static int
 cmp_node_mbs(const struct archive_rb_node *n1,
     const struct archive_rb_node *n2)
 {
-	struct match_file *f1 = (struct match_file *)n1;
-	struct match_file *f2 = (struct match_file *)n2;
+	struct match_file *f1 = (struct match_file *)(uintptr_t)n1;
+	struct match_file *f2 = (struct match_file *)(uintptr_t)n2;
 	const char *p1, *p2;
 
 	archive_mstring_get_mbs(NULL, &(f1->pathname), &p1);
@@ -1089,7 +1115,7 @@ cmp_node_mbs(const struct archive_rb_node *n1,
 static int
 cmp_key_mbs(const struct archive_rb_node *n, const void *key)
 {
-	struct match_file *f = (struct match_file *)n;
+	struct match_file *f = (struct match_file *)(uintptr_t)n;
 	const char *p;
 
 	archive_mstring_get_mbs(NULL, &(f->pathname), &p);
@@ -1102,8 +1128,8 @@ static int
 cmp_node_wcs(const struct archive_rb_node *n1,
     const struct archive_rb_node *n2)
 {
-	struct match_file *f1 = (struct match_file *)n1;
-	struct match_file *f2 = (struct match_file *)n2;
+	struct match_file *f1 = (struct match_file *)(uintptr_t)n1;
+	struct match_file *f2 = (struct match_file *)(uintptr_t)n2;
 	const wchar_t *p1, *p2;
 
 	archive_mstring_get_wcs(NULL, &(f1->pathname), &p1);
@@ -1118,7 +1144,7 @@ cmp_node_wcs(const struct archive_rb_node *n1,
 static int
 cmp_key_wcs(const struct archive_rb_node *n, const void *key)
 {
-	struct match_file *f = (struct match_file *)n;
+	struct match_file *f = (struct match_file *)(uintptr_t)n;
 	const wchar_t *p;
 
 	archive_mstring_get_wcs(NULL, &(f->pathname), &p);
@@ -1176,7 +1202,7 @@ add_entry(struct archive_match *a, int flag,
 		return (ARCHIVE_FAILED);
 	}
 	archive_mstring_copy_wcs(&(f->pathname), pathname);
-	a->newer_tree.rbt_ops = &rb_ops_wcs;
+	a->exclusion_tree.rbt_ops = &rb_ops_wcs;
 #else
 	pathname = archive_entry_pathname(entry);
 	if (pathname == NULL) {
@@ -1185,47 +1211,48 @@ add_entry(struct archive_match *a, int flag,
 		return (ARCHIVE_FAILED);
 	}
 	archive_mstring_copy_mbs(&(f->pathname), pathname);
-	a->newer_tree.rbt_ops = &rb_ops_mbs;
+	a->exclusion_tree.rbt_ops = &rb_ops_mbs;
 #endif
 	f->flag = flag;
 	f->mtime_sec = archive_entry_mtime(entry);
 	f->mtime_nsec = archive_entry_mtime_nsec(entry);
 	f->ctime_sec = archive_entry_ctime(entry);
 	f->ctime_nsec = archive_entry_ctime_nsec(entry);
-	r = __archive_rb_tree_insert_node(&(a->newer_tree), &(f->node));
+	r = __archive_rb_tree_insert_node(&(a->exclusion_tree), &(f->node));
 	if (!r) {
 		struct match_file *f2;
 
 		/* Get the duplicated file. */
 		f2 = (struct match_file *)__archive_rb_tree_find_node(
-			&(a->newer_tree), pathname);
+			&(a->exclusion_tree), pathname);
 
-		/* Overwrite mtime condision if it is newer than. */
+		/*
+		 * We always overwrite comparison condision.
+		 * If you do not want to overwrite it, you should not
+		 * call archive_match_exclude_entry(). We cannot know
+		 * what behavior you really expect since overwriting
+		 * condition might be different with the flag.
+		 */
 		if (f2 != NULL) {
 			f2->flag = f->flag;
-			if ((f2->mtime_sec < f->mtime_sec) ||
-			      (f2->mtime_sec == f->mtime_sec &&
-			       f2->mtime_nsec < f->mtime_nsec)) {
-				f2->mtime_sec = f->mtime_sec;
-				f2->mtime_nsec = f->mtime_nsec;
-			}
-			if ((f2->ctime_sec < f->ctime_sec) ||
-			      (f2->ctime_sec == f->ctime_sec &&
-			       f2->ctime_nsec < f->ctime_nsec)) {
-				f2->ctime_sec = f->ctime_sec;
-				f2->ctime_nsec = f->ctime_nsec;
-			}
-			/* Release the duplicated file. */ 
-			archive_mstring_clean(&(f->pathname));
-			free(f);
-			return (ARCHIVE_OK);
+			f2->mtime_sec = f->mtime_sec;
+			f2->mtime_nsec = f->mtime_nsec;
+			f2->ctime_sec = f->ctime_sec;
+			f2->ctime_nsec = f->ctime_nsec;
 		}
+		/* Release the duplicated file. */
+		archive_mstring_clean(&(f->pathname));
+		free(f);
+		return (ARCHIVE_OK);
 	}
-	entry_list_add(&(a->entry_list), f);
+	entry_list_add(&(a->exclusion_entry_list), f);
 	a->setflag |= TIME_IS_SET;
 	return (ARCHIVE_OK);
 }
 
+/*
+ * Test if entry is excluded by its timestamp.
+ */
 static int
 time_excluded(struct archive_match *a, struct archive_entry *entry)
 {
@@ -1310,22 +1337,22 @@ time_excluded(struct archive_match *a, struct archive_entry *entry)
 		}
 	}
 
-	/* If there is no incluson list, include the file. */
-	if (a->entry_list.count == 0)
+	/* If there is no excluson list, include the file. */
+	if (a->exclusion_entry_list.count == 0)
 		return (0);
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 	pathname = archive_entry_pathname_w(entry);
-	a->newer_tree.rbt_ops = &rb_ops_wcs;
+	a->exclusion_tree.rbt_ops = &rb_ops_wcs;
 #else
 	pathname = archive_entry_pathname(entry);
-	a->newer_tree.rbt_ops = &rb_ops_mbs;
+	a->exclusion_tree.rbt_ops = &rb_ops_mbs;
 #endif
 	if (pathname == NULL)
 		return (0);
 
 	f = (struct match_file *)__archive_rb_tree_find_node(
-		&(a->newer_tree), pathname);
+		&(a->exclusion_tree), pathname);
 	/* If the file wasn't rejected, include it. */
 	if (f == NULL)
 		return (0);
@@ -1475,6 +1502,8 @@ archive_match_owner_excluded(struct archive *_a,
 static int
 add_owner_id(struct archive_match *a, struct id_array *ids, int64_t id)
 {
+	unsigned i;
+
 	if (ids->count + 1 >= ids->size) {
 		if (ids->size == 0)
 			ids->size = 8;
@@ -1484,10 +1513,22 @@ add_owner_id(struct archive_match *a, struct id_array *ids, int64_t id)
 		if (ids->ids == NULL)
 			return (error_nomem(a));
 	}
-	/*
-	 * TODO: sort id list.
-	 */
-	ids->ids[ids->count++] = id;
+
+	/* Find an insert point. */
+	for (i = 0; i < ids->count; i++) {
+		if (ids->ids[i] >= id)
+			break;
+	}
+
+	/* Add oowner id. */
+	if (i == ids->count)
+		ids->ids[ids->count++] = id;
+	else if (ids->ids[i] != id) {
+		memmove(&(ids->ids[i+1]), &(ids->ids[i]),
+		    (ids->count - i) * sizeof(ids->ids[0]));
+		ids->ids[i] = id;
+		ids->count++;
+	}
 	a->setflag |= ID_IS_SET;
 	return (ARCHIVE_OK);
 }
@@ -1495,11 +1536,18 @@ add_owner_id(struct archive_match *a, struct id_array *ids, int64_t id)
 static int
 match_owner_id(struct id_array *ids, int64_t id)
 {
-	int i;
+	unsigned b, m, t;
 
-	for (i = 0; i < (int)ids->count; i++) {
-		if (ids->ids[i] == id)
+	t = 0;
+	b = ids->count;
+	while (t < b) {
+		m = (t + b)>>1;
+		if (ids->ids[m] == id)
 			return (1);
+		if (ids->ids[m] < id)
+			t = m + 1;
+		else
+			b = m;
 	}
 	return (0);
 }
@@ -1566,6 +1614,9 @@ match_owner_name_wcs(struct archive_match *a, struct match_list *list,
 }
 #endif
 
+/*
+ * Test if entry is excluded by uid, gid, uname or gname.
+ */
 static int
 owner_excluded(struct archive_match *a, struct archive_entry *entry)
 {
