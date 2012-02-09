@@ -156,7 +156,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 	struct archive		 *a;
 	struct archive_entry	 *entry;
 	int			  r;
-	int			  listopt, rename = 0;
+	int			  listopt, renamed = 0;
 
 	while (*bsdpax->argv) {
 		if (bsdpax->option_exclude)
@@ -298,10 +298,10 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 				continue; /* Excluded by a rewrite failure. */
 
 			if (bsdpax->option_interactive) {
-				rename = pax_rename(bsdpax, entry);
-				if (rename < 0)
+				renamed = pax_rename(bsdpax, entry);
+				if (renamed < 0)
 					break;
-				else if (rename == 0)
+				else if (renamed == 0)
 					continue;/* Skip it. */
 			}
 

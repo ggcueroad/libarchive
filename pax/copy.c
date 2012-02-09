@@ -99,8 +99,8 @@ static void		 copy_entry(struct bsdpax *, struct archive *,
 static void		 copy_disk(struct archive *, struct bsdpax *);
 static void		 copy_file(struct bsdpax *, struct archive *,
 			     struct archive_entry *, const char *);
-static int		 copy_file_data_block(struct bsdpax *, struct archive *,
-			     struct archive_entry *);
+static int		 copy_file_data_block(struct bsdpax *,
+			     struct archive *);
 static int		 copy_hierarchy(struct bsdpax *, struct archive *,
 			     const char *);
 static char *		 make_destpath(struct bsdpax *, const char *);
@@ -225,8 +225,8 @@ metadata_filter(struct archive *a, void *_data, struct archive_entry *entry)
 	/*
 	 * Do not copy destination directory itself.
 	 */
-	if (bsdpax->dest_dev == archive_entry_dev(entry) &&
-	    bsdpax->dest_ino == archive_entry_ino(entry)) {
+	if (bsdpax->dest_dev == (int64_t)archive_entry_dev(entry) &&
+	    bsdpax->dest_ino == (int64_t)archive_entry_ino(entry)) {
 		lafe_warnc(0,
 		    "Cannot copy destination directory itself %s",
 		    bsdpax->destdir);
@@ -263,7 +263,7 @@ copy_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 {
 	struct archive *disk = bsdpax->diskreader;
 	struct archive_entry *entry = NULL, *spare_entry = NULL;
-	int r, rename = 0;
+	int r, renamed = 0;
 	char *hardlinkpath = NULL;
 
 	bsdpax->first_fs = -1;
@@ -307,10 +307,10 @@ copy_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 		 * the user with it.
 		 */
 		if (bsdpax->option_interactive) {
-			rename = pax_rename(bsdpax, entry);
-			if (rename < 0)
+			renamed = pax_rename(bsdpax, entry);
+			if (renamed < 0)
 				break; /* Do not add the following entries. */
-			else if (rename == 0)
+			else if (renamed == 0)
 				continue;/* Skip this entry. */
 		}
 
@@ -368,7 +368,7 @@ copy_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 	archive_entry_free(entry);
 	archive_read_close(disk);
 
-	return (rename);
+	return (renamed);
 }
 
 /*
@@ -446,15 +446,14 @@ copy_entry(struct bsdpax *bsdpax, struct archive *to,
 	 * that case, just skip the write.
 	 */
 	if (e >= ARCHIVE_WARN && archive_entry_size(entry) > 0) {
-		if (copy_file_data_block(bsdpax, to, entry) < 0)
+		if (copy_file_data_block(bsdpax, to) < 0)
 			exit(1);
 	}
 }
 
 /* Helper function to copy file to disk. */
 static int
-copy_file_data_block(struct bsdpax *bsdpax, struct archive *a,
-    struct archive_entry *entry)
+copy_file_data_block(struct bsdpax *bsdpax, struct archive *a)
 {
 	size_t	bytes_read;
 	ssize_t	bytes_written;

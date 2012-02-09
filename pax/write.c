@@ -465,7 +465,7 @@ static int
 append_archive(struct bsdpax *bsdpax, struct archive *a, struct archive *ina)
 {
 	struct archive_entry *in_entry;
-	int e, rename = 0;
+	int e, renamed = 0;
 
 	while (ARCHIVE_OK == (e = archive_read_next_header(ina, &in_entry))) {
 		/*
@@ -475,10 +475,10 @@ append_archive(struct bsdpax *bsdpax, struct archive *a, struct archive *ina)
 			continue;/* Skip it. */
 
 		if (bsdpax->option_interactive) {
-			rename = pax_rename(bsdpax, in_entry);
-			if (rename < 0)
+			renamed = pax_rename(bsdpax, in_entry);
+			if (renamed < 0)
 				break; /* Do not add the following entries. */
-			else if (rename == 0)
+			else if (renamed == 0)
 				continue;/* Skip this entry. */
 		}
 
@@ -532,6 +532,7 @@ metadata_filter(struct archive *a, void *_data, struct archive_entry *entry)
 {
 	struct bsdpax *bsdpax = (struct bsdpax *)_data;
 
+	(void)entry; /* UNUSED */
 	/*
 	 * User has asked us not to cross mount points.
 	 */
@@ -554,7 +555,7 @@ write_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 {
 	struct archive *disk = bsdpax->diskreader;
 	struct archive_entry *entry = NULL, *spare_entry = NULL;
-	int r, rename = 0;
+	int r, renamed = 0;
 
 	bsdpax->first_fs = -1;
 	r = archive_read_disk_open(disk, path);
@@ -589,10 +590,10 @@ write_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 		 * the user with it.
 		 */
 		if (bsdpax->option_interactive) {
-			rename = pax_rename(bsdpax, entry);
-			if (rename < 0)
+			renamed = pax_rename(bsdpax, entry);
+			if (renamed < 0)
 				break; /* Do not add the following entries. */
-			else if (rename == 0)
+			else if (renamed == 0)
 				continue;/* Skip this entry. */
 		}
 
@@ -670,7 +671,7 @@ write_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 	archive_entry_free(entry);
 	archive_read_close(disk);
 
-	return (rename);
+	return (renamed);
 }
 
 /*

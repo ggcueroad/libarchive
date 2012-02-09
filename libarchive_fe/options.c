@@ -440,7 +440,7 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
 			 */
 			if (sub != NULL) {
 				++sub;/* skip an '=' character. */
-				if (end - sub >= sizeof(subfmt)) {
+				if (end - sub >= (int)sizeof(subfmt)) {
 					strncpy(subfmt, sub, sizeof(subfmt)-1);
 					subfmt[sizeof(subfmt)-1] = '\0';
 				} else {
