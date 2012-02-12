@@ -178,7 +178,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 	else
 		archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
-	lafe_set_options(bsdpax->options, archive_read_set_options, a);
+	bsdpax_set_options(bsdpax->options, archive_read_set_options, a);
 	if (archive_read_open_file(a, bsdpax->filename, bsdpax->bytes_per_block))
 		lafe_errc(1, 0, "Error opening archive: %s",
 		    archive_error_string(a));
@@ -205,7 +205,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 #endif
 	}
 
-	listopt = lafe_has_listopt(bsdpax->options);
+	listopt = bsdpax_has_listopt(bsdpax->options);
 
 	for (;;) {
 		/* Support --fast-read option */
@@ -254,7 +254,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 			 * you cannot easily preview rewrites.
 			 */
 			if (listopt) {
-				r = lafe_entry_fprintf(
+				r = bsdpax_entry_fprintf(
 				    bsdpax->options, out, entry);
 				if (r != 0)
 					lafe_errc(1, 0,
@@ -322,7 +322,7 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 			/*
 			 * Overrite attributes.
 			 */
-			lafe_edit_entry(bsdpax->options, entry);
+			bsdpax_edit_entry(bsdpax->options, entry);
 
 			if (bsdpax->option_no_atime)
 				archive_entry_unset_atime(entry);

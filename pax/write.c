@@ -199,7 +199,7 @@ pax_mode_write(struct bsdpax *bsdpax)
 		if (bsdpax->matching2 == NULL)
 			lafe_errc(1, 0, "Out of memory");
 	}
-	lafe_set_options(bsdpax->options, archive_write_set_options, a);
+	bsdpax_set_options(bsdpax->options, archive_write_set_options, a);
 	if (ARCHIVE_OK != archive_write_open_file(a, bsdpax->filename))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 	write_archive(a, bsdpax);
@@ -285,7 +285,7 @@ pax_mode_append(struct bsdpax *bsdpax)
 
 	if (lseek(bsdpax->fd, end_offset, SEEK_SET) < 0)
 		lafe_errc(1, errno, "Could not seek to archive end");
-	lafe_set_options(bsdpax->options, archive_write_set_options, a);
+	bsdpax_set_options(bsdpax->options, archive_write_set_options, a);
 	if (ARCHIVE_OK != archive_write_open_fd(a, bsdpax->fd))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 
@@ -499,7 +499,7 @@ append_archive(struct bsdpax *bsdpax, struct archive *a, struct archive *ina)
 		/*
 		 * Overrite attributes.
 		 */
-		lafe_edit_entry(bsdpax->options, in_entry);
+		bsdpax_edit_entry(bsdpax->options, in_entry);
 
 		e = archive_write_header(a, in_entry);
 		if (e != ARCHIVE_OK) {
@@ -654,7 +654,7 @@ write_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 		/*
 		 * Overrite attributes.
 		 */
-		lafe_edit_entry(bsdpax->options, entry);
+		bsdpax_edit_entry(bsdpax->options, entry);
 
 		archive_entry_linkify(bsdpax->resolver, &entry, &spare_entry);
 

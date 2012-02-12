@@ -25,7 +25,7 @@
  */
 
 
-#include "lafe_platform.h"
+#include "bsdpax_platform.h"
 __FBSDID("$FreeBSD$");
 
 #include <ctype.h>
@@ -60,15 +60,15 @@ __FBSDID("$FreeBSD$");
 #include "archive_entry.h"
 #endif
 
+#include "bsdpax.h"
 #include "err.h"
-#include "getdate.h"
 #include "options.h"
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #define strdup(_s)	_strdup(_s)
 #endif
 
-struct lafe_options {
+struct bsdpax_options {
 	char		*options;
 	char		*listopt;
 
@@ -94,52 +94,51 @@ struct lafe_options {
 
 #define	HALF_YEAR (time_t)(365 * 86400 / 2)
 
-static void lafe_safe_fprintf(FILE *f, const char *fmt, ...);
-static size_t lafe_expand_char(char *buff, size_t offset, char c);
+time_t get_date(time_t now, const char *p);
 
 void
-lafe_init_options(struct lafe_options **lafe_opt)
+bsdpax_init_options(struct bsdpax_options **bsdpax_opt)
 {
 
-	*lafe_opt = calloc(1, sizeof(struct lafe_options));
-	if (lafe_opt == NULL)
+	*bsdpax_opt = calloc(1, sizeof(struct bsdpax_options));
+	if (bsdpax_opt == NULL)
 		lafe_errc(1, errno, "Out of memory");
 }
 
 void
-lafe_free_options(struct lafe_options *lafe_opt)
+bsdpax_free_options(struct bsdpax_options *bsdpax_opt)
 {
-	free(lafe_opt->options);
-	free(lafe_opt->listopt);
-	free(lafe_opt->uname);
-	free(lafe_opt->gname);
-	free(lafe_opt);
+	free(bsdpax_opt->options);
+	free(bsdpax_opt->listopt);
+	free(bsdpax_opt->uname);
+	free(bsdpax_opt->gname);
+	free(bsdpax_opt);
 }
 
 void
-lafe_add_options(struct lafe_options *lafe_opt, const char *opt)
+bsdpax_add_options(struct bsdpax_options *bsdpax_opt, const char *opt)
 {
-	char *np, *p = lafe_opt->options;
+	char *np, *p = bsdpax_opt->options;
 
 	if (p != NULL) {
 		np = malloc(strlen(p) + strlen(opt) +1);
 		if (np != NULL) {
 			strcpy(np, p);
 			strcpy(np+strlen(p), opt);
-			lafe_opt->options = np;
+			bsdpax_opt->options = np;
 			free(p);
 		}
 	 } else
-		lafe_opt->options = np = strdup(opt);
+		bsdpax_opt->options = np = strdup(opt);
 
 	if (np == NULL)
 		lafe_errc(1, errno, "Out of memory");
 }
 
 int
-lafe_has_listopt(struct lafe_options *lafe_opt)
+bsdpax_has_listopt(struct bsdpax_options *bsdpax_opt)
 {
-	return (lafe_opt->listopt != NULL);
+	return (bsdpax_opt->listopt != NULL);
 }
 
 /*
@@ -148,7 +147,7 @@ lafe_has_listopt(struct lafe_options *lafe_opt)
  * following simple utility function.
  */
 static const char *
-lafe_i64toa(char *buff, size_t buff_size, int64_t n0)
+bsdpax_i64toa(char *buff, size_t buff_size, int64_t n0)
 {
 	uint64_t n = n0 < 0 ? -n0 : n0;
 	char *p = buff + buff_size;
@@ -163,7 +162,7 @@ lafe_i64toa(char *buff, size_t buff_size, int64_t n0)
 }
 
 int
-lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
+bsdpax_entry_fprintf(struct bsdpax_options *bsdpax_opt, FILE *f,
     struct archive_entry *entry)
 {
 	const char *p;
@@ -174,7 +173,7 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
 	char *fs, *fe;
 	time_t t;
 
-	for (p = lafe_opt->listopt; *p != '\0'; p++) {
+	for (p = bsdpax_opt->listopt; *p != '\0'; p++) {
 		const char *_p, *tfmt, *str;
 		unsigned long v = 0;
 		enum {
@@ -615,17 +614,17 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
 			}
 			if (str == NULL)
 				str = "";
-			lafe_safe_fprintf(f, efmt, str);
+			safe_fprintf(f, efmt, str);
 			break;
 		case 'L': /* Linkname format. */
 			*fs++ = 's';
 			*fs = '\0';
-			lafe_safe_fprintf(f, efmt, archive_entry_pathname(entry));
+			safe_fprintf(f, efmt, archive_entry_pathname(entry));
 			if (archive_entry_hardlink(entry))
-				lafe_safe_fprintf(f, " link to %s",
+				safe_fprintf(f, " link to %s",
 				    archive_entry_hardlink(entry));
 			else if (archive_entry_symlink(entry))
-				lafe_safe_fprintf(f, " -> %s",
+				safe_fprintf(f, " -> %s",
 				    archive_entry_symlink(entry));
 			break;
 		case 's':
@@ -640,7 +639,7 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
 				break;
 			case P_SIZE:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_size(entry)));
 				break;
 			case P_UNAME:
@@ -650,7 +649,7 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
 				/* FALL THROUGH */
 			case P_UID:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_uid(entry)));
 				break;
 			case P_GNAME:
@@ -660,62 +659,62 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
 				/* FALL THROUGH */
 			case P_GID:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_gid(entry)));
 				break;
 			case P_NLINK:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_nlink(entry)));
 				break;
 			case P_ATIME:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_atime(entry)));
 				break;
 			case P_CTIME:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_ctime(entry)));
 				break;
 			case P_MTIME:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_mtime(entry)));
 				break;
 			case P_INO:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_ino(entry)));
 				break;
 			case P_DEV:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_dev(entry)));
 				break;
 			case P_DEVMAJOR:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_devmajor(entry)));
 				break;
 			case P_DEVMINOR:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_devminor(entry)));
 				break;
 			case P_RDEV:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_rdev(entry)));
 				break;
 			case P_RDEVMAJOR:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_rdevmajor(entry)));
 				break;
 			case P_RDEVMINOR:
 				sprintf(tmp, "%s",
-				    lafe_i64toa(buff, sizeof(buff),
+				    bsdpax_i64toa(buff, sizeof(buff),
 					archive_entry_rdevminor(entry)));
 				break;
 			default:
@@ -808,7 +807,7 @@ lafe_entry_fprintf(struct lafe_options *lafe_opt, FILE *f,
  * it does obey locale.
  */
 static int64_t
-lafe_atol8(const char *p)
+bsdpax_atol8(const char *p)
 {
 	int64_t l;
 	int digit;
@@ -827,7 +826,7 @@ lafe_atol8(const char *p)
 }
 
 static int64_t
-lafe_atoi(const char *p)
+bsdpax_atoi(const char *p)
 {
 	int64_t v = 0, pv;
 	int d;
@@ -853,7 +852,7 @@ lafe_atoi(const char *p)
 
 static const char opt_true[] = "1";
 static int
-use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
+use_option(struct bsdpax_options *bsdpax_opt, const char *opt, const char *val)
 {
 	time_t now;
 
@@ -861,10 +860,10 @@ use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
 	case 'a':
 		if (strcmp(opt, "atime") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_ATIME;
+			bsdpax_opt->entry_set |= E_ATIME;
 			time(&now);
-			lafe_opt->atime = get_date(now, val);
-			if (lafe_opt->atime == (time_t)-1)
+			bsdpax_opt->atime = get_date(now, val);
+			if (bsdpax_opt->atime == (time_t)-1)
 				lafe_errc(1, 0, "invalid atime format");
 			return (0);
 		}
@@ -872,10 +871,10 @@ use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
 	case 'c':
 		if (strcmp(opt, "ctime") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_CTIME;
+			bsdpax_opt->entry_set |= E_CTIME;
 			time(&now);
-			lafe_opt->ctime = get_date(now, val);
-			if (lafe_opt->ctime == (time_t)-1)
+			bsdpax_opt->ctime = get_date(now, val);
+			if (bsdpax_opt->ctime == (time_t)-1)
 				lafe_errc(1, 0, "invalid ctime format");
 			return (0);
 		}
@@ -883,16 +882,16 @@ use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
 	case 'g':
 		if (strcmp(opt, "gid") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_GID;
-			lafe_opt->gid = lafe_atoi(val);
-			if (lafe_opt->gid < 0)
+			bsdpax_opt->entry_set |= E_GID;
+			bsdpax_opt->gid = bsdpax_atoi(val);
+			if (bsdpax_opt->gid < 0)
 				lafe_errc(1, 0, "gid must be positive");
 			return (0);
 		} else if (strcmp(opt, "gname") == 0 &&
 		    val != NULL && val != opt_true) {
-			lafe_opt->entry_set |= E_GNAME;
-			lafe_opt->gname = strdup(val);
-			if (lafe_opt->gname == NULL)
+			bsdpax_opt->entry_set |= E_GNAME;
+			bsdpax_opt->gname = strdup(val);
+			if (bsdpax_opt->gname == NULL)
 				lafe_errc(1, errno, "Out of memory");
 			return (0);
 		}
@@ -900,17 +899,17 @@ use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
 	case 'l':
 		if (strcmp(opt, "listopt") == 0 && val != NULL &&
 		    val != opt_true) {
-			char *np, *p = lafe_opt->listopt;
+			char *np, *p = bsdpax_opt->listopt;
 			if (p != NULL) {
 				np = malloc(strlen(p) + strlen(val) +1);
 				if (np != NULL) {
 					strcpy(np, p);
 					strcpy(np+strlen(p), val);
-					lafe_opt->listopt = np;
+					bsdpax_opt->listopt = np;
 					free(p);
 				}
 			} else
-				lafe_opt->listopt = np = strdup(val);
+				bsdpax_opt->listopt = np = strdup(val);
 			if (np == NULL)
 				lafe_errc(1, errno, "Out of memory");
 			return (0);
@@ -919,15 +918,15 @@ use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
 	case 'm':
 		if (strcmp(opt, "mode") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_MODE;
-			lafe_opt->mode = (mode_t)(lafe_atol8(val) & 0777);
+			bsdpax_opt->entry_set |= E_MODE;
+			bsdpax_opt->mode = (mode_t)(bsdpax_atol8(val) & 0777);
 			return (0);
 		} else if (strcmp(opt, "mtime") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_MTIME;
+			bsdpax_opt->entry_set |= E_MTIME;
 			time(&now);
-			lafe_opt->mtime = get_date(now, val);
-			if (lafe_opt->mtime == (time_t)-1)
+			bsdpax_opt->mtime = get_date(now, val);
+			if (bsdpax_opt->mtime == (time_t)-1)
 				lafe_errc(1, 0, "invalid mtime format");
 			return (0);
 		}
@@ -935,16 +934,16 @@ use_option(struct lafe_options *lafe_opt, const char *opt, const char *val)
 	case 'u':
 		if (strcmp(opt, "uid") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_UID;
-			lafe_opt->uid = lafe_atoi(val);
-			if (lafe_opt->uid < 0)
+			bsdpax_opt->entry_set |= E_UID;
+			bsdpax_opt->uid = bsdpax_atoi(val);
+			if (bsdpax_opt->uid < 0)
 				lafe_errc(1, 0, "uid must be positive");
 			return (0);
 		} else if (strcmp(opt, "uname") == 0 && val != NULL &&
 		    val != opt_true) {
-			lafe_opt->entry_set |= E_UNAME;
-			lafe_opt->uname = strdup(val);
-			if (lafe_opt->uname == NULL)
+			bsdpax_opt->entry_set |= E_UNAME;
+			bsdpax_opt->uname = strdup(val);
+			if (bsdpax_opt->uname == NULL)
 				lafe_errc(1, errno, "Out of memory");
 			return (0);
 		}
@@ -1005,18 +1004,18 @@ parse_option(const char **s, const char **m, const char **o, const char **v)
 }
 
 void
-lafe_set_options(struct lafe_options *lafe_opt,
-    lafe_options_callback archive_options, struct archive *a)
+bsdpax_set_options(struct bsdpax_options *bsdpax_opt,
+    bsdpax_options_callback archive_options, struct archive *a)
 {
 	int r;
 	char *data, *ar_data, *ar_s;
 	const char *s, *mod, *opt, *val;
 
-	if (lafe_opt->options == NULL || lafe_opt->options[0] == '\0')
+	if (bsdpax_opt->options == NULL || bsdpax_opt->options[0] == '\0')
 		return;
 
-	data = strdup(lafe_opt->options);
-	ar_data = strdup(lafe_opt->options);
+	data = strdup(bsdpax_opt->options);
+	ar_data = strdup(bsdpax_opt->options);
 	if (data == NULL || ar_data == NULL)
 		lafe_errc(1, errno, "Out of memory");
 	s = (const char *)data;
@@ -1036,7 +1035,7 @@ lafe_set_options(struct lafe_options *lafe_opt,
 		parse_option(&s, &mod, &opt, &val);
 
 		if (mod == NULL && opt != NULL) {
-			r = use_option(lafe_opt, opt, val);
+			r = use_option(bsdpax_opt, opt, val);
 			if (r == 0)
 				used = 1;
 		}
@@ -1066,175 +1065,41 @@ lafe_set_options(struct lafe_options *lafe_opt,
 		s = archive_error_string(a);
 		if (s == NULL)
 			lafe_errc(1, 0, "No one accepted the options: %s",
-			    lafe_opt->options);
+			    bsdpax_opt->options);
 		else
 			lafe_errc(1, 0, "%s", s);
 	}
 }
 
 
-/*
- * Print a string, taking care with any non-printable characters.
- *
- * Note that we use a stack-allocated buffer to receive the formatted
- * string if we can.  This is partly performance (avoiding a call to
- * malloc()), partly out of expedience (we have to call vsnprintf()
- * before malloc() anyway to find out how big a buffer we need; we may
- * as well point that first call at a small local buffer in case it
- * works), but mostly for safety (so we can use this to print messages
- * about out-of-memory conditions).
- */
-
-static void
-lafe_safe_fprintf(FILE *f, const char *fmt, ...)
-{
-	char fmtbuff_stack[256]; /* Place to format the printf() string. */
-	char outbuff[256]; /* Buffer for outgoing characters. */
-	char *fmtbuff_heap; /* If fmtbuff_stack is too small, we use malloc */
-	char *fmtbuff;  /* Pointer to fmtbuff_stack or fmtbuff_heap. */
-	int fmtbuff_length;
-	int length, n;
-	va_list ap;
-	const char *p;
-	unsigned i;
-	wchar_t wc;
-	char try_wc;
-
-	/* Use a stack-allocated buffer if we can, for speed and safety. */
-	fmtbuff_heap = NULL;
-	fmtbuff_length = sizeof(fmtbuff_stack);
-	fmtbuff = fmtbuff_stack;
-
-	/* Try formatting into the stack buffer. */
-	va_start(ap, fmt);
-	length = vsnprintf(fmtbuff, fmtbuff_length, fmt, ap);
-	va_end(ap);
-
-	/* If the result was too large, allocate a buffer on the heap. */
-	if (length >= fmtbuff_length) {
-		fmtbuff_length = length+1;
-		fmtbuff_heap = malloc(fmtbuff_length);
-
-		/* Reformat the result into the heap buffer if we can. */
-		if (fmtbuff_heap != NULL) {
-			fmtbuff = fmtbuff_heap;
-			va_start(ap, fmt);
-			length = vsnprintf(fmtbuff, fmtbuff_length, fmt, ap);
-			va_end(ap);
-		} else {
-			/* Leave fmtbuff pointing to the truncated
-			 * string in fmtbuff_stack. */
-			length = sizeof(fmtbuff_stack) - 1;
-		}
-	}
-
-	/* Note: mbrtowc() has a cleaner API, but mbtowc() seems a bit
-	 * more portable, so we use that here instead. */
-	n = mbtowc(NULL, NULL, 1); /* Reset the shift state. */
-
-	/* Write data, expanding unprintable characters. */
-	p = fmtbuff;
-	i = 0;
-	try_wc = 1;
-	while (*p != '\0') {
-
-		/* Convert to wide char, test if the wide
-		 * char is printable in the current locale. */
-		if (try_wc && (n = mbtowc(&wc, p, length)) != -1) {
-			length -= n;
-			if (iswprint(wc) && wc != L'\\') {
-				/* Printable, copy the bytes through. */
-				while (n-- > 0)
-					outbuff[i++] = *p++;
-			} else {
-				/* Not printable, format the bytes. */
-				while (n-- > 0)
-					i += (unsigned)lafe_expand_char(
-					    outbuff, i, *p++);
-			}
-		} else {
-			/* After any conversion failure, don't bother
-			 * trying to convert the rest. */
-			i += (unsigned)lafe_expand_char(outbuff, i, *p++);
-			try_wc = 0;
-		}
-
-		/* If our output buffer is full, dump it and keep going. */
-		if (i > (sizeof(outbuff) - 20)) {
-			outbuff[i] = '\0';
-			fprintf(f, "%s", outbuff);
-			i = 0;
-		}
-	}
-	outbuff[i] = '\0';
-	fprintf(f, "%s", outbuff);
-
-	/* If we allocated a heap-based formatting buffer, free it now. */
-	if (fmtbuff_heap != NULL)
-		free(fmtbuff_heap);
-}
-
-/*
- * Render an arbitrary sequence of bytes into printable ASCII characters.
- */
-static size_t
-lafe_expand_char(char *buff, size_t offset, char c)
-{
-	size_t i = offset;
-
-	if (isprint((unsigned char)c) && c != '\\')
-		buff[i++] = c;
-	else {
-		buff[i++] = '\\';
-		switch (c) {
-		case '\a': buff[i++] = 'a'; break;
-		case '\b': buff[i++] = 'b'; break;
-		case '\f': buff[i++] = 'f'; break;
-		case '\n': buff[i++] = 'n'; break;
-#if '\r' != '\n'
-		/* On some platforms, \n and \r are the same. */
-		case '\r': buff[i++] = 'r'; break;
-#endif
-		case '\t': buff[i++] = 't'; break;
-		case '\v': buff[i++] = 'v'; break;
-		case '\\': buff[i++] = '\\'; break;
-		default:
-			sprintf(buff + i, "%03o", 0xFF & (int)c);
-			i += 3;
-		}
-	}
-
-	return (i - offset);
-}
-
 void
-lafe_edit_entry(struct lafe_options *lafe_opt, struct archive_entry *e)
+bsdpax_edit_entry(struct bsdpax_options *bsdpax_opt, struct archive_entry *e)
 {
-	if (lafe_opt->entry_set == 0)
+	if (bsdpax_opt->entry_set == 0)
 		return;
 
-	if (lafe_opt->entry_set & E_UID) {
-		archive_entry_set_uid(e, lafe_opt->uid);
-		if ((lafe_opt->entry_set & E_UNAME) == 0)
+	if (bsdpax_opt->entry_set & E_UID) {
+		archive_entry_set_uid(e, bsdpax_opt->uid);
+		if ((bsdpax_opt->entry_set & E_UNAME) == 0)
 			archive_entry_set_uname(e, NULL);
 	}
-	if (lafe_opt->entry_set & E_UNAME)
-		archive_entry_set_uname(e, lafe_opt->uname);
-	if (lafe_opt->entry_set & E_GID) {
-		archive_entry_set_gid(e, lafe_opt->gid);
-		if ((lafe_opt->entry_set & E_GNAME) == 0)
+	if (bsdpax_opt->entry_set & E_UNAME)
+		archive_entry_set_uname(e, bsdpax_opt->uname);
+	if (bsdpax_opt->entry_set & E_GID) {
+		archive_entry_set_gid(e, bsdpax_opt->gid);
+		if ((bsdpax_opt->entry_set & E_GNAME) == 0)
 			archive_entry_set_gname(e, NULL);
 	}
-	if (lafe_opt->entry_set & E_GNAME)
-		archive_entry_set_gname(e, lafe_opt->gname);
-	if (lafe_opt->entry_set & E_ATIME)
-		archive_entry_set_atime(e, lafe_opt->atime, 0);
-	if (lafe_opt->entry_set & E_CTIME)
-		archive_entry_set_ctime(e, lafe_opt->ctime, 0);
-	if (lafe_opt->entry_set & E_MTIME)
-		archive_entry_set_mtime(e, lafe_opt->mtime, 0);
-	if (lafe_opt->entry_set & E_MODE) {
+	if (bsdpax_opt->entry_set & E_GNAME)
+		archive_entry_set_gname(e, bsdpax_opt->gname);
+	if (bsdpax_opt->entry_set & E_ATIME)
+		archive_entry_set_atime(e, bsdpax_opt->atime, 0);
+	if (bsdpax_opt->entry_set & E_CTIME)
+		archive_entry_set_ctime(e, bsdpax_opt->ctime, 0);
+	if (bsdpax_opt->entry_set & E_MTIME)
+		archive_entry_set_mtime(e, bsdpax_opt->mtime, 0);
+	if (bsdpax_opt->entry_set & E_MODE) {
 		mode_t ft = archive_entry_filetype(e);
-		archive_entry_set_mode(e, ft | (lafe_opt->mode & ~AE_IFMT));
+		archive_entry_set_mode(e, ft | (bsdpax_opt->mode & ~AE_IFMT));
 	}
 }

@@ -26,11 +26,23 @@
  * $FreeBSD$
  */
 
-#ifndef GETDATE_H
-#define GETDATE_H
+#ifndef OPTIONS_H
+#define OPTIONS_H
 
-#include <time.h>
+struct archive;
+struct archive_entry;
+struct bsdpax_options;
 
-time_t get_date(time_t, const char *);
+typedef int (*bsdpax_options_callback)(struct archive *, const char *);
+
+void	bsdpax_init_options(struct bsdpax_options **);
+void	bsdpax_free_options(struct bsdpax_options *);
+void	bsdpax_add_options(struct bsdpax_options *, const char *);
+int	bsdpax_has_listopt(struct bsdpax_options *);
+int	bsdpax_entry_fprintf(struct bsdpax_options *, FILE *,
+	    struct archive_entry *);
+void	bsdpax_set_options(struct bsdpax_options *, bsdpax_options_callback,
+	    struct archive *);
+void	bsdpax_edit_entry(struct bsdpax_options *, struct archive_entry *);
 
 #endif

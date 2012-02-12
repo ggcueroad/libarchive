@@ -351,7 +351,7 @@ copy_hierarchy(struct bsdpax *bsdpax, struct archive *a, const char *path)
 		/*
 		 * Overrite attributes.
 		 */
-		lafe_edit_entry(bsdpax->options, entry);
+		bsdpax_edit_entry(bsdpax->options, entry);
 
 		archive_entry_linkify(bsdpax->resolver, &entry, &spare_entry);
 

@@ -69,7 +69,6 @@ __FBSDID("$FreeBSD$");
 
 #include "bsdpax.h"
 #include "err.h"
-#include "getdate.h"
 
 #ifdef __MINGW32__
 int _CRT_glob = 0; /* Disable broken CRT globbing. */
@@ -132,7 +131,7 @@ main(int argc, char **argv)
 	bsdpax->mode = PAXMODE_LIST;
 	bsdpax->fd = -1; /* Mark as "unused" */
 	option_a = 0;
-	lafe_init_options(&(bsdpax->options));
+	bsdpax_init_options(&(bsdpax->options));
 
 #if defined(HAVE_SIGACTION)
 	{ /* Set up signal handling. */
@@ -319,7 +318,7 @@ main(int argc, char **argv)
 			bsdpax->option_fast_read = 1;
 			break;
 		case 'o':
-			lafe_add_options(bsdpax->options, bsdpax->argument);
+			bsdpax_add_options(bsdpax->options, bsdpax->argument);
 			break;
 		case 'P':
 			bsdpax->symlink_mode = opt;
@@ -534,7 +533,7 @@ main(int argc, char **argv)
 #if HAVE_REGEX_H
 	cleanup_substitution(bsdpax);
 #endif
-	lafe_free_options(bsdpax->options);
+	bsdpax_free_options(bsdpax->options);
 
 	if (bsdpax->return_value != 0)
 		lafe_warnc(0,
@@ -686,6 +685,7 @@ long_help(void)
 static void
 parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 {
+	extern time_t get_date(time_t now, char *p);
 	char *s = strdup(opt);
 	char *p;
 	time_t t;

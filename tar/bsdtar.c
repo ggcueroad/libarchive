@@ -69,7 +69,6 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/bsdtar.c,v 1.93 2008/11/08 04:43:24 kientzle
 
 #include "bsdtar.h"
 #include "err.h"
-#include "getdate.h"
 
 /*
  * Per POSIX.1-1988, tar defaults to reading/writing archives to/from

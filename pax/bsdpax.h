@@ -123,7 +123,7 @@ struct bsdpax {
 	struct name_cache	*uname_cache;	/* for write.c */
 	struct siginfo_data	*siginfo;	/* for siginfo.c */
 	struct substitution	*substitution;	/* for subst.c */
-	struct lafe_options	*options;	/* for read.c or write.c */
+	struct bsdpax_options	*options;	/* for read.c or write.c */
 };
 
 /* Fake short equivalents for long options that otherwise lack them. */
