@@ -103,8 +103,7 @@ static void	 compression_conflict_error(struct bsdpax *, int compression);
 static void	 long_help(void);
 static void	 only_mode(struct bsdpax *, const char *opt, char valid);
 static void	 version(void);
-static void	 parse_option_T(struct bsdpax *bsdpax, time_t now,
-		    const char *opt);
+static void	 parse_option_T(struct bsdpax *bsdpax, const char *opt);
 
 /* A basic set of security flags to request from libarchive. */
 #define	SECURITY					\
@@ -119,7 +118,6 @@ main(int argc, char **argv)
 	int			 opt, t;
 	char			 option_a;
 	char			 buff[16];
-	time_t			 now;
 	struct stat		 st;
 
 	/*
@@ -171,8 +169,6 @@ main(int argc, char **argv)
 		else
 			lafe_progname = *argv;
 	}
-
-	time(&now);
 
 #if HAVE_SETLOCALE
 	if (setlocale(LC_ALL, "") == NULL)
@@ -394,7 +390,7 @@ main(int argc, char **argv)
 				    bsdpax->argument);
 			break;
 		case 'T':
-			parse_option_T(bsdpax, now, bsdpax->argument);
+			parse_option_T(bsdpax, bsdpax->argument);
 			break;
 		case 't':
 			bsdpax->readdisk_flags |= ARCHIVE_READDISK_RESTORE_ATIME;
@@ -683,12 +679,10 @@ long_help(void)
 }
 
 static void
-parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
+parse_option_T(struct bsdpax *bsdpax, const char *opt)
 {
-	extern time_t get_date(time_t now, char *p);
 	char *s = strdup(opt);
 	char *p;
-	time_t t;
 	int flag, mf;
 #define USE_MTIME	1
 #define USE_CTIME	2
@@ -713,15 +707,14 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 	if (p != NULL) {
 		/* Parse 'to date'. */
 		*p++ = '\0';
-		t = get_date(now, p);
 		mf = 0;
 		if (flag & USE_MTIME)
 			mf |= ARCHIVE_MATCH_MTIME;
 		if (flag & USE_CTIME)
 			mf |= ARCHIVE_MATCH_CTIME;
-		if (t != (time_t)-1 && mf) {
+		if (mf) {
 			mf |= ARCHIVE_MATCH_OLDER | ARCHIVE_MATCH_EQUAL;
-			archive_match_include_time(bsdpax->matching, mf, t, 0);
+			archive_match_include_date(bsdpax->matching, mf, p);
 		}
 	}
 	p = s;
@@ -729,15 +722,14 @@ parse_option_T(struct bsdpax *bsdpax, time_t now, const char *opt)
 		p++;
 	if (strlen(p) > 0) {
 		/* Parse 'from date'. */
-		t = get_date(now, p);
 		mf = 0;
 		if (flag & USE_MTIME)
 			mf |= ARCHIVE_MATCH_MTIME;
 		if (flag & USE_CTIME)
 			mf |= ARCHIVE_MATCH_CTIME;
-		if (t != (time_t)-1 && mf) {
+		if (mf) {
 			mf |= ARCHIVE_MATCH_NEWER | ARCHIVE_MATCH_EQUAL;
-			archive_match_include_time(bsdpax->matching, mf, t, 0);
+			archive_match_include_date(bsdpax->matching, mf, p);
 		}
 	}
 	free(s);
