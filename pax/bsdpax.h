@@ -28,7 +28,6 @@
 #include "bsdpax_platform.h"
 #include <stdio.h>
 
-#include "matching.h"
 #include "options.h"
 
 #define	DEFAULT_BYTES_PER_BLOCK	(20*512)
