@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2010-2011 Michihiro NAKAJIMA
+ * Copyright (c) 2010-2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -478,11 +478,13 @@ archive_read_format_cab_options(struct archive_read *a,
 			else
 				ret = ARCHIVE_FATAL;
 		}
-	} else
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "cab: unknown keyword ``%s''", key);
+		return (ret);
+	}
 
-	return (ret);
+	/* Note: The "warn" return is just to inform the options
+	 * supervisor that we didn't handle it.  It will generate
+	 * a suitable error if no one used this option. */
+	return (ARCHIVE_WARN);
 }
 
 static int
@@ -2180,11 +2182,11 @@ lzx_translation(struct lzx_stream *strm, void *p, size_t size, uint32_t offset)
 	end = b + size - 10;
 	while (b < end && (b = memchr(b, 0xE8, end - b)) != NULL) {
 		size_t i = b - (unsigned char *)p;
-		long cp, displacement, value;
+		int32_t cp, displacement, value;
 
 		cp = offset + i;
 		value = archive_le32dec(&b[1]);
-		if (value >= -cp && value < (long)ds->translation_size) {
+		if (value >= -cp && value < (int32_t)ds->translation_size) {
 			if (value >= 0)
 				displacement = value - cp;
 			else
@@ -2475,7 +2477,10 @@ lzx_read_blocks(struct lzx_stream *strm, int last)
 			 */
 			/* Skip padding to align following field on
 			 * 16-bit boundary. */
-			lzx_br_consume_unalined_bits(br);
+			if (br->cache_avail == 32 || br->cache_avail == 16)
+				lzx_br_consume(br, 16);
+			else
+				lzx_br_consume_unalined_bits(br);
 			/* Preparation to read repeated offsets R0,R1 and R2. */
 			ds->rbytes_avail = 0;
 			ds->state = ST_RD_R0;
