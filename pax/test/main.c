@@ -129,7 +129,14 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
-void *GetFunctionKernel32(const char *name)
+static void	*GetFunctionKernel32(const char *);
+static int	 my_CreateSymbolicLinkA(const char *, const char *, int);
+static int	 my_CreateHardLinkA(const char *, const char *);
+static int	 my_GetFileInformationByName(const char *,
+		     BY_HANDLE_FILE_INFORMATION *);
+
+static void *
+GetFunctionKernel32(const char *name)
 {
 	static HINSTANCE lib;
 	static int set;
@@ -168,7 +175,7 @@ my_CreateHardLinkA(const char *linkname, const char *target)
 	return f == NULL ? 0 : (*f)(linkname, target, NULL);
 }
 
-int
+static int
 my_GetFileInformationByName(const char *path, BY_HANDLE_FILE_INFORMATION *bhfi)
 {
 	HANDLE h;
@@ -1520,7 +1527,7 @@ assertion_make_dir(const char *file, int line, const char *dirname, int mode)
 /* Create a file with the specified contents and report any failures. */
 int
 assertion_make_file(const char *file, int line,
-    const char *path, int mode, const char *contents)
+    const char *path, int mode, int csize, const void *contents)
 {
 #if defined(_WIN32) && !defined(__CYGWIN__)
 	/* TODO: Rework this to set file mode as well. */
@@ -1534,8 +1541,13 @@ assertion_make_file(const char *file, int line,
 		return (0);
 	}
 	if (contents != NULL) {
-		if (strlen(contents)
-		    != fwrite(contents, 1, strlen(contents), f)) {
+		size_t wsize;
+
+		if (csize < 0)
+			wsize = strlen(contents);
+		else
+			wsize = (size_t)csize;
+		if (wsize != fwrite(contents, 1, wsize, f)) {
 			fclose(f);
 			failure_start(file, line,
 			    "Could not write file %s", path);
@@ -1555,10 +1567,16 @@ assertion_make_file(const char *file, int line,
 		return (0);
 	}
 	if (contents != NULL) {
-		if ((ssize_t)strlen(contents)
-		    != write(fd, contents, strlen(contents))) {
+		ssize_t wsize;
+
+		if (csize < 0)
+			wsize = (ssize_t)strlen(contents);
+		else
+			wsize = (ssize_t)csize;
+		if (wsize != write(fd, contents, wsize)) {
 			close(fd);
-			failure_start(file, line, "Could not write to %s", path);
+			failure_start(file, line,
+			    "Could not write to %s", path);
 			failure_finish(NULL);
 			return (0);
 		}
@@ -1803,7 +1821,7 @@ canSymlink(void)
 		return (value);
 
 	++tested;
-	assertion_make_file(__FILE__, __LINE__, "canSymlink.0", 0644, "a");
+	assertion_make_file(__FILE__, __LINE__, "canSymlink.0", 0644, 1, "a");
 	/* Note: Cygwin has its own symlink() emulation that does not
 	 * use the Win32 CreateSymbolicLink() function. */
 #if defined(_WIN32) && !defined(__CYGWIN__)
@@ -1863,7 +1881,7 @@ canNodump(void)
 	const char *path = "cannodumptest";
 	struct stat sb;
 
-	assertion_make_file(__FILE__, __LINE__, path, 0644, NULL);
+	assertion_make_file(__FILE__, __LINE__, path, 0644, 0, NULL);
 	if (chflags(path, UF_NODUMP) < 0)
 		return (0);
 	if (stat(path, &sb) < 0)
@@ -1882,7 +1900,7 @@ canNodump(void)
 	const char *path = "cannodumptest";
 	int fd, r, flags;
 
-	assertion_make_file(__FILE__, __LINE__, path, 0644, NULL);
+	assertion_make_file(__FILE__, __LINE__, path, 0644, 0, NULL);
 	fd = open(path, O_RDONLY | O_NONBLOCK);
 	if (fd < 0)
 		return (0);
@@ -1909,7 +1927,7 @@ canNodump(void)
 #else
 
 int
-canNodump(void)
+canNodump()
 {
 	return (0);
 }
