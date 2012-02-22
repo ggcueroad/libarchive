@@ -71,10 +71,6 @@
 #include <windows.h>
 //#define	EFTYPE 7
 
-#if defined(_MSC_VER)
-/* TODO: Fix the code, don't suppress the warnings. */
-#pragma warning(disable:4244)   /* 'conversion' conversion from 'type1' to 'type2', possible loss of data */
-#endif
 #if defined(__BORLANDC__)
 #pragma warn -8068	/* Constant out of range in comparison. */
 #pragma warn -8072	/* Suspicious pointer arithmetic. */
@@ -269,6 +265,8 @@ extern wchar_t *__la_win_permissive_name(const char *name);
 extern wchar_t *__la_win_permissive_name_w(const wchar_t *wname);
 extern void __la_dosmaperr(unsigned long e);
 #define la_dosmaperr(e) __la_dosmaperr(e)
+extern struct archive_entry *__la_win_entry_in_posix_pathseparator(
+    struct archive_entry *);
 
 #if defined(HAVE_WCRTOMB) && defined(__BORLANDC__)
 typedef int mbstate_t;

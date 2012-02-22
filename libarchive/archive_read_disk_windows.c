@@ -552,7 +552,7 @@ trivial_lookup_uname(void *private_data, int64_t uid)
 static int64_t
 align_num_per_sector(struct tree *t, int64_t size)
 {
-	int surplus;
+	int64_t surplus;
 
 	size += t->current_filesystem->bytesPerSector -1;
 	surplus = size % t->current_filesystem->bytesPerSector;
@@ -599,7 +599,7 @@ start_next_async_read(struct archive_read_disk *a, struct tree *t)
 
 	buffbytes = olp->buff_size;
 	if (buffbytes > t->current_sparse->length)
-		buffbytes = t->current_sparse->length;
+		buffbytes = (DWORD)t->current_sparse->length;
 
 	/* Skip hole. */
 	if (t->current_sparse->offset > t->ol_total) {
@@ -615,7 +615,7 @@ start_next_async_read(struct archive_read_disk *a, struct tree *t)
 		olp->bytes_expected = buffbytes;
 		t->ol_remaining_bytes -= buffbytes;
 	} else {
-		olp->bytes_expected = t->ol_remaining_bytes;
+		olp->bytes_expected = (size_t)t->ol_remaining_bytes;
 		t->ol_remaining_bytes = 0;
 	}
 	olp->bytes_transferred = 0;
@@ -1775,7 +1775,7 @@ tree_dir_next_windows(struct tree *t, const wchar_t *pattern)
 
 #define EPOC_TIME ARCHIVE_LITERAL_ULL(116444736000000000)
 static void
-fileTimeToUtc(const FILETIME *filetime, time_t *time, long *ns)
+fileTimeToUtc(const FILETIME *filetime, time_t *t, long *ns)
 {
 	ULARGE_INTEGER utc;
 
@@ -1784,11 +1784,11 @@ fileTimeToUtc(const FILETIME *filetime, time_t *time, long *ns)
 	if (utc.QuadPart >= EPOC_TIME) {
 		utc.QuadPart -= EPOC_TIME;
 		/* milli seconds base */
-		*time = (time_t)(utc.QuadPart / 10000000);
+		*t = (time_t)(utc.QuadPart / 10000000);
 		/* nano seconds base */
 		*ns = (long)(utc.QuadPart % 10000000) * 100;
 	} else {
-		*time = 0;
+		*t = 0;
 		*ns = 0;
 	}
 }

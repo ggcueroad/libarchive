@@ -7,7 +7,13 @@ SET(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/build/cmake")
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${libarchive_BINARY_DIR}/bin)
 endif()
-SET(CMAKE_BUILD_TYPE "Debug")
+#
+# Set the Build type for make based generators.
+#
+SET(CMAKE_BUILD_TYPE "Debug")		# Debug build
+#SET(CMAKE_BUILD_TYPE "Release")		# Release build
+#SET(CMAKE_BUILD_TYPE "RelWithDebInfo")	# Release build with Debug Info
+#SET(CMAKE_BUILD_TYPE "MinSizeRel")	# Release Min Size build
 
 # On MacOS, prefer MacPorts libraries to system libraries.
 # I haven't come up with a compelling argument for this to be conditional.
@@ -52,9 +58,35 @@ SET(SOVERSION "${INTERFACE_VERSION}")
 # aggressive about diagnosing build problems; this can get
 # relaxed somewhat in final shipping versions.
 IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
-  ADD_DEFINITIONS(-Wall -Werror -Wextra -Wunused -Wshadow -Wmissing-prototypes -Wcast-qual)
-  SET(CMAKE_REQUIRED_FLAGS "-Wall -Werror")
+  SET(CMAKE_REQUIRED_FLAGS "-Wall")
+  # Set compile flags for all build types.
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+  # Set compile flags for debug build.
+  # This is added into CMAKE_C_FLAGS when CMAKE_BUILD_TYPE is "Debug"
+  SET(CMAKE_C_FLAGS_DEBUG
+      "${CMAKE_C_FLAGS_DEBUG} -Werror -Wextra -Wunused -Wshadow -Wmissing-prototypes -Wcast-qual")
 ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+IF (MSVC)
+  # Set compile flags for debug build.
+  # This is added into CMAKE_C_FLAGS when CMAKE_BUILD_TYPE is "Debug"
+  # Enable level 4 C4061: The enumerate has no associated handler in a switch
+  #                       statement.
+  # Enable level 4 C4296: An unsigned variable was used in a comparison
+  #                       operation with zero.
+  # Enable level 4 C4389: An operation involved signed and unsigned variables.
+  #                       This could result in a loss of data.
+  # Enable level 4 C4505: The given function is local and not referenced in
+  #                       the body of the module; therefore, the function is
+  #                       dead code.
+  # Enable level 4 C4706: The test value in a conditional expression was the
+  #                       result of an assignment.
+  # /WX option is the same as gcc's -Werror option.
+  # /Oi option enables built-in functions.
+  SET(CMAKE_C_FLAGS_DEBUG
+      "${CMAKE_C_FLAGS_DEBUG} /WX /Oi /we4061 /we4296 /we4389 /we4505 /we4706")
+  # Set compile flags for release build.
+  SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /Oi")
+ENDIF (MSVC)
 
 # Enable CTest/CDash support
 include(CTest)
@@ -525,6 +557,21 @@ ENDMACRO(CHECK_CRYPTO_WIN CRYPTO_LIST)
 #
 MACRO(CHECK_ICONV LIB TRY_ICONV_CONST)
   IF(NOT HAVE_ICONV)
+    IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+      #
+      # During checking iconv proto type, we should use -Werror to avoid the
+      # success of iconv detection with a warnig which success is a miss
+      # detection. So this needs for all build mode(even it's a release mode).
+      #
+      SET(SAVE_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+      SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror")
+    ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+    IF (MSVC)
+      # NOTE: /WX option is the same as gcc's -Werror option.
+      SET(SAVE_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+      SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} /WX")
+    ENDIF (MSVC)
+    #
     CHECK_C_SOURCE_COMPILES(
       "#include <stdlib.h>
        #include <iconv.h>
@@ -540,6 +587,12 @@ MACRO(CHECK_ICONV LIB TRY_ICONV_CONST)
       SET(HAVE_ICONV true)
       SET(ICONV_CONST ${TRY_ICONV_CONST})
     ENDIF(HAVE_ICONV_${LIB}_${TRY_ICONV_CONST})
+    #
+    # Restore CMAKE_REQUIRED_FLAGS
+    #
+    IF (("CMAKE_C_COMPILER_ID" MATCHES "^GNU$") OR MSVC)
+      SET(CMAKE_REQUIRED_FLAGS ${SAVE_CMAKE_REQUIRED_FLAGS})
+    ENDIF (("CMAKE_C_COMPILER_ID" MATCHES "^GNU$") OR MSVC)
   ENDIF(NOT HAVE_ICONV)
 ENDMACRO(CHECK_ICONV TRY_ICONV_CONST)
 
@@ -619,6 +672,37 @@ ELSE(LIBXML2_FOUND)
     LA_CHECK_INCLUDE_FILE("expat.h" HAVE_EXPAT_H)
   ENDIF(EXPAT_FOUND)
 ENDIF(LIBXML2_FOUND)
+
+#
+# Find Libregex
+#
+FIND_PATH(REGEX_INCLUDE_DIR regex.h)
+IF(REGEX_INCLUDE_DIR)
+  CHECK_FUNCTION_EXISTS_GLIBC(regcomp HAVE_REGCOMP_LIBC)
+  #
+  # If libc does not provide regex, find libregex.
+  #
+  IF(NOT HAVE_REGCOMP_LIBC)
+    FIND_LIBRARY(REGEX_LIBRARY regex)
+    IF(REGEX_LIBRARY)
+      SET(CMAKE_REQUIRED_LIBRARIES ${REGEX_LIBRARY})
+      CHECK_FUNCTION_EXISTS_GLIBC(regcomp HAVE_REGCOMP_LIBREGEX)
+      IF(HAVE_REGCOMP_LIBREGEX)
+        LIST(APPEND ADDITIONAL_LIBS ${REGEX_LIBRARY})
+        #
+        # If regex.h is not found, retry looking for regex.h at
+        # REGEX_INCLUDE_DIR
+        #
+        IF(NOT HAVE_REGEX_H)
+          UNSET(HAVE_REGEX_H CACHE)
+          INCLUDE_DIRECTORIES(${REGEX_INCLUDE_DIR})
+          SET(CMAKE_REQUIRED_INCLUDES ${REGEX_INCLUDE_DIR})
+          LA_CHECK_INCLUDE_FILE("regex.h" HAVE_REGEX_H)
+        ENDIF(NOT HAVE_REGEX_H)
+      ENDIF(HAVE_REGCOMP_LIBREGEX)
+    ENDIF(REGEX_LIBRARY)
+  ENDIF(NOT HAVE_REGCOMP_LIBC)
+ENDIF(REGEX_INCLUDE_DIR)
 
 #
 # Check functions
