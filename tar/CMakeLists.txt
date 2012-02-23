@@ -16,8 +16,6 @@ IF(ENABLE_TAR)
     write.c
     ../libarchive_fe/err.c
     ../libarchive_fe/err.h
-    ../libarchive_fe/getdate.c
-    ../libarchive_fe/getdate.h
     ../libarchive_fe/lafe_platform.h
     ../libarchive_fe/line_reader.c
     ../libarchive_fe/line_reader.h
