@@ -21,9 +21,11 @@ TESTS= libarchive_test $(bsdtar_test_programs) $(bsdcpio_test_programs) $(bsdpax
 TESTS_ENVIRONMENT= $(libarchive_TESTS_ENVIRONMENT) $(bsdtar_TESTS_ENVIRONMENT) $(bsdcpio_TESTS_ENVIRONMENT) $(bsdpax_TESTS_ENVIRONMENT)
 # Always build and test both bsdtar and bsdcpio as part of 'distcheck'
 DISTCHECK_CONFIGURE_FLAGS = --enable-bsdtar --enable-bsdcpio --enable-bsdpax
+COMMON_CFLAGS=-Wall -Wformat -Wformat-security
 # The next line is commented out by default in shipping libarchive releases.
 # It is uncommented by default in trunk.
-AM_CFLAGS=-Wall -Werror -Wextra -Wunused -Wshadow -Wmissing-prototypes -Wcast-qual
+DEV_CFLAGS=-Werror -Wextra -Wunused -Wshadow -Wmissing-prototypes -Wcast-qual
+AM_CFLAGS=$(COMMON_CFLAGS) $(DEV_CFLAGS)
 PLATFORMCPPFLAGS = @PLATFORMCPPFLAGS@
 AM_CPPFLAGS=$(PLATFORMCPPFLAGS)
 
