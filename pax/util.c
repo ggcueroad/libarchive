@@ -1,6 +1,6 @@
 /*-
  * Copyright (c) 2003-2007 Tim Kientzle
- * Copyright (c) 2011 Michihiro NAKAJIMA
+ * Copyright (c) 2011-2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -246,10 +246,20 @@ pax_rename(struct bsdpax *bsdpax, struct archive_entry *entry)
 	time_t tim;
 	static time_t now;
 	int ret;
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	FILE *ti;
 
+	ti = fopen("CONIN$", "r");
+	if (ti == NULL)
+		lafe_errc(1, errno, "Can't open CONIN$");
+	t = fopen("CONOUT$", "w");
+	if (t == NULL)
+		lafe_errc(1, errno, "Can't open CONOUT$");
+#else
 	t = fopen("/dev/tty", "r+");
 	if (t == NULL)
 		lafe_errc(1, errno, "Can't open /dev/tty");
+#endif
 
 	if (!now)
 		time(&now);
@@ -277,7 +287,11 @@ pax_rename(struct bsdpax *bsdpax, struct archive_entry *entry)
 	fprintf(t, "Input > ");
 	fflush(t);
 
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	p = fgets(buff, sizeof(buff), ti);
+#else
 	p = fgets(buff, sizeof(buff), t);
+#endif
 	if (p == NULL) {
 		/* End-of-file. */
 		ret = -1;
@@ -310,6 +324,9 @@ pax_rename(struct bsdpax *bsdpax, struct archive_entry *entry)
 finish_rename:
 	fflush(t);
 	fclose(t);
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	fclose(ti);
+#endif
 	return (ret);
 }
 
