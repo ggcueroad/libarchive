@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2003-2007 Tim Kientzle
+ * Copyright (c) 2011-2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -70,6 +71,26 @@
 #define	__LA_DEAD	__attribute__((__noreturn__))
 #else
 #define	__LA_DEAD
+#endif
+
+/* Borland warns about its own constants!  */
+#if defined(__BORLANDC__)
+# if HAVE_DECL_UINT64_MIN
+#  undef	UINT64_MIN
+#  undef	HAVE_DECL_UINT64_MIN
+# endif
+# if HAVE_DECL_INT64_MAX
+#  undef	INT64_MAX
+#  undef	HAVE_DECL_INT64_MAX
+# endif
+#endif
+
+/* Some platforms lack the standard *_MAX definitions. */
+#if !HAVE_DECL_UINT64_MAX
+#define	UINT64_MAX (~(uint64_t)0)
+#endif
+#if !HAVE_DECL_INT64_MAX
+#define	INT64_MAX ((int64_t)(UINT64_MAX >> 1))
 #endif
 
 #if defined(_WIN32) && !defined(__CYGWIN__)

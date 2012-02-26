@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2011 Michihiro NAKAJIMA
+ * Copyright (c) 2011-2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,10 +63,6 @@ __FBSDID("$FreeBSD$");
 #include "bsdpax.h"
 #include "err.h"
 #include "options.h"
-
-#if defined(_WIN32) && !defined(__CYGWIN__)
-#define strdup(_s)	_strdup(_s)
-#endif
 
 struct bsdpax_options {
 	char		*options;
