@@ -367,21 +367,52 @@ write_archive(struct archive *a, struct bsdpax *bsdpax)
 		bsdpax->argv++;
 	}
 
+	archive_read_disk_set_matching(bsdpax->diskreader, NULL, NULL, NULL);
+	archive_read_disk_set_metadata_filter_callback(
+	    bsdpax->diskreader, NULL, NULL);
 	entry = NULL;
 	archive_entry_linkify(bsdpax->resolver, &entry, &sparse_entry);
 	while (entry != NULL) {
-		int r = archive_read_disk_open(bsdpax->diskreader,
-		    archive_entry_pathname(entry));
+		int r;
+		struct archive_entry *entry2;
+		struct archive *disk = bsdpax->diskreader;
+
+		/*
+		 * This tricky code here is to correctly read the cotents
+		 * of the entry because the disk reader bsdpax->diskreader
+		 * is pointing at does not have any information about the
+		 * entry by this time and using archive_read_data_block()
+		 * with the disk reader consequently must fail. And we
+		 * have to re-open the entry to read the contents.
+		 */
+		/* TODO: Work with -C option as well. */
+		r = archive_read_disk_open(disk,
+			archive_entry_sourcepath(entry));
 		if (r != ARCHIVE_OK) {
-			lafe_warnc(archive_errno(bsdpax->diskreader),
-			    "%s", archive_error_string(bsdpax->diskreader));
-			if (r == ARCHIVE_FATAL)
-				exit(1);
-			else if (r < ARCHIVE_WARN) {
-				bsdpax->return_value = 1;
-				break;
-			}
+			lafe_warnc(archive_errno(disk),
+			    "%s", archive_error_string(disk));
+			bsdpax->return_value = 1;
+			archive_entry_free(entry);
+			continue;
 		}
+
+		/*
+		 * Invoke archive_read_next_header2() to work
+		 * archive_read_data_block(), which is called via write_file(),
+		 * without failure.
+		 */
+		entry2 = archive_entry_new();
+		r = archive_read_next_header2(disk, entry2);
+		archive_entry_free(entry2);
+		if (r != ARCHIVE_OK) {
+			lafe_warnc(archive_errno(disk),
+			    "%s", archive_error_string(disk));
+			if (r == ARCHIVE_FATAL)
+				bsdpax->return_value = 1;
+			archive_entry_free(entry);
+			continue;
+		}
+
 		write_file(bsdpax, a, entry);
 		archive_entry_free(entry);
 		archive_read_close(bsdpax->diskreader);

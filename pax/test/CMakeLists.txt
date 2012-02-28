@@ -9,6 +9,7 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test.h
     test_0.c
     test_basic.c
+    test_format_newc.c
     test_help.c
     test_option_D_upper.c
     test_option_H_upper.c

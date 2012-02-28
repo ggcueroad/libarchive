@@ -894,6 +894,7 @@ bsdpax_test_SOURCES=						\
 	pax/test/test.h						\
 	pax/test/test_0.c					\
 	pax/test/test_basic.c					\
+	pax/test/test_format_newc.c				\
 	pax/test/test_help.c					\
 	pax/test/test_option_D_upper.c				\
 	pax/test/test_option_H_upper.c				\
