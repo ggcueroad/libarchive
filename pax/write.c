@@ -409,13 +409,15 @@ write_archive(struct archive *a, struct bsdpax *bsdpax)
 			    "%s", archive_error_string(disk));
 			if (r == ARCHIVE_FATAL)
 				bsdpax->return_value = 1;
+			else
+				archive_read_close(disk);
 			archive_entry_free(entry);
 			continue;
 		}
 
 		write_file(bsdpax, a, entry);
 		archive_entry_free(entry);
-		archive_read_close(bsdpax->diskreader);
+		archive_read_close(disk);
 		entry = NULL;
 		archive_entry_linkify(bsdpax->resolver, &entry, &sparse_entry);
 	}
