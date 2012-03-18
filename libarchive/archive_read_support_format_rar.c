@@ -1131,9 +1131,6 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     rar->unp_size = archive_le32dec(file_header.unp_size);
   }
 
-  /* TODO: Need to use CRC check for these kind of cases.
-   * For now, check if sizes are not < 0.
-   */
   if (rar->packed_size < 0 || rar->unp_size < 0)
   {
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
@@ -1161,13 +1158,17 @@ read_header(struct archive_read *a, struct archive_entry *entry,
       "Invalid filename size");
     return (ARCHIVE_FATAL);
   }
-  if (rar->filename_allocated < filename_size+2) {
-    rar->filename = realloc(rar->filename, filename_size+2);
-    if (rar->filename == NULL) {
+  if (rar->filename_allocated < filename_size * 2 + 2) {
+    char *newptr;
+    size_t newsize = filename_size * 2 + 2;
+    newptr = realloc(rar->filename, newsize);
+    if (newptr == NULL) {
       archive_set_error(&a->archive, ENOMEM,
                         "Couldn't allocate memory.");
       return (ARCHIVE_FATAL);
     }
+    rar->filename = newptr;
+    rar->filename_allocated = newsize;
   }
   filename = rar->filename;
   memcpy(filename, p, filename_size);
@@ -1176,15 +1177,17 @@ read_header(struct archive_read *a, struct archive_entry *entry,
   {
     if (filename_size != strlen(filename))
     {
-      unsigned char highbyte, flagbits, flagbyte, length, offset;
+      unsigned char highbyte, flagbits, flagbyte, offset;
+      unsigned fn_end;
 
       end = filename_size;
+      fn_end = filename_size * 2;
       filename_size = 0;
       offset = strlen(filename) + 1;
       highbyte = *(p + offset++);
       flagbits = 0;
       flagbyte = 0;
-      while (offset < end && filename_size < end)
+      while (offset < end && filename_size < fn_end)
       {
         if (!flagbits)
         {
@@ -1210,19 +1213,26 @@ read_header(struct archive_read *a, struct archive_entry *entry,
             break;
           case 3:
           {
-            length = *(p + offset++);
-            while (length)
-            {
-	          if (filename_size >= end)
-			    break;
-              filename[filename_size++] = *(p + offset);
+            char extra, high;
+            uint8_t length = *(p + offset++);
+
+            if (length & 0x80) {
+              extra = *(p + offset++);
+              high = (char)highbyte;
+            } else
+              extra = high = 0;
+            length = (length & 0x7f) + 2;
+            while (length && filename_size < fn_end) {
+              unsigned cp = filename_size >> 1;
+              filename[filename_size++] = high;
+              filename[filename_size++] = p[cp] + extra;
               length--;
             }
           }
           break;
         }
       }
-      if (filename_size >= end) {
+      if (filename_size > fn_end) {
         archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
           "Invalid filename");
         return (ARCHIVE_FATAL);

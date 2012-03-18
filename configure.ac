@@ -18,7 +18,7 @@ AC_PREREQ(2.65)
 # Now starts the "real" configure script.
 #
 
-AC_INIT([libarchive],LIBARCHIVE_VERSION_S(),[kientzle@FreeBSD.org])
+AC_INIT([libarchive],LIBARCHIVE_VERSION_S(),[libarchive-discuss@googlegroups.com])
 # Make sure the srcdir contains "libarchive" directory
 AC_CONFIG_SRCDIR([libarchive])
 # Use auxiliary subscripts from this subdirectory (cleans up root)
@@ -245,13 +245,6 @@ case $host in
   ;;
 esac
 
-# We need CoreServices on Mac OS.
-case $host in
-  *darwin* )
-  LIBS="${LIBS} -framework CoreServices"
-  ;;
-esac
-
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_SYS_WAIT
@@ -271,7 +264,7 @@ AS_VAR_IF([ac_cv_have_decl_EXT2_IOC_GETFLAGS], [yes],
                     [Define to 1 if you have a working EXT2_IOC_GETFLAGS])])
 
 AC_CHECK_HEADERS([inttypes.h io.h langinfo.h limits.h])
-AC_CHECK_HEADERS([linux/fiemap.h linux/fs.h linux/magic.h])
+AC_CHECK_HEADERS([linux/fiemap.h linux/fs.h linux/magic.h linux/types.h])
 AC_CHECK_HEADERS([locale.h paths.h poll.h pwd.h regex.h signal.h stdarg.h])
 AC_CHECK_HEADERS([stdint.h stdlib.h string.h])
 AC_CHECK_HEADERS([sys/acl.h sys/cdefs.h sys/extattr.h sys/ioctl.h])
