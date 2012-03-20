@@ -127,6 +127,7 @@ archive_entry_linkresolver_set_strategy(struct archive_entry_linkresolver *res,
 	switch (fmtbase) {
 	case ARCHIVE_FORMAT_7ZIP:
 	case ARCHIVE_FORMAT_AR:
+	case ARCHIVE_FORMAT_CAB:
 	case ARCHIVE_FORMAT_ZIP:
 		res->strategy = ARCHIVE_ENTRY_LINKIFY_LIKE_OLD_CPIO;
 		break;

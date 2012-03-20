@@ -180,6 +180,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_write_set_format_7zip.c		\
 	libarchive/archive_write_set_format_ar.c		\
 	libarchive/archive_write_set_format_by_name.c		\
+	libarchive/archive_write_set_format_cab.c		\
 	libarchive/archive_write_set_format_cpio.c		\
 	libarchive/archive_write_set_format_cpio_newc.c		\
 	libarchive/archive_write_set_format_iso9660.c		\
@@ -402,6 +403,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_disk_times.c			\
 	libarchive/test/test_write_format_7zip.c		\
 	libarchive/test/test_write_format_ar.c			\
+	libarchive/test/test_write_format_cab.c			\
 	libarchive/test/test_write_format_cpio.c		\
 	libarchive/test/test_write_format_cpio_empty.c		\
 	libarchive/test/test_write_format_cpio_newc.c		\

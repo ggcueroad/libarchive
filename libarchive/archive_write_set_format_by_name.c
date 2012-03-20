@@ -50,6 +50,7 @@ struct { const char *name; int (*setter)(struct archive *); } names[] =
 	{ "argnu",	archive_write_set_format_ar_svr4 },
 	{ "arsvr4",	archive_write_set_format_ar_svr4 },
 	{ "bsdtar",	archive_write_set_format_pax_restricted },
+	{ "cab",	archive_write_set_format_cab },
 	{ "cd9660",	archive_write_set_format_iso9660 },
 	{ "cpio",	archive_write_set_format_cpio },
 	{ "gnutar",	archive_write_set_format_gnutar },

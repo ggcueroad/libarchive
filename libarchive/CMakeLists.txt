@@ -104,6 +104,7 @@ SET(libarchive_SOURCES
   archive_write_set_format_7zip.c
   archive_write_set_format_ar.c
   archive_write_set_format_by_name.c
+  archive_write_set_format_cab.c
   archive_write_set_format_cpio.c
   archive_write_set_format_cpio_newc.c
   archive_write_set_format_gnutar.c

@@ -667,10 +667,10 @@ cab_read_header(struct archive_read *a)
 	hd->major = p[CFHEADER_versionMajor];
 	hd->folder_count = archive_le16dec(p + CFHEADER_cFolders);
 	if (hd->folder_count == 0)
-		goto invalid;
+		return (ARCHIVE_EOF);
 	hd->file_count = archive_le16dec(p + CFHEADER_cFiles);
 	if (hd->file_count == 0)
-		goto invalid;
+		return (ARCHIVE_EOF);
 	hd->flags = archive_le16dec(p + CFHEADER_flags);
 	hd->setid = archive_le16dec(p + CFHEADER_setID);
 	hd->cabinet = archive_le16dec(p + CFHEADER_iCabinet);
