@@ -42,32 +42,6 @@ __FBSDID("$FreeBSD$");
 #include "archive_string.h"
 #include "archive_write_private.h"
 
-enum la_zaction {
-	ARCHIVE_Z_FINISH,
-	ARCHIVE_Z_RUN
-};
-
-/*
- * A stream object of universal compressor.
- */
-struct la_zstream {
-	const uint8_t		*next_in;
-	size_t			 avail_in;
-	uint64_t		 total_in;
-
-	uint8_t			*next_out;
-	size_t			 avail_out;
-	uint64_t		 total_out;
-
-	int			 valid;
-	void			*real_stream;
-	int			 (*code) (struct archive *a,
-				    struct la_zstream *lastrm,
-				    enum la_zaction action);
-	int			 (*end)(struct archive *a,
-				    struct la_zstream *lastrm);
-};
-
 /*
  * Cabinet file definitions.
  */
@@ -112,6 +86,7 @@ struct cffolder {
 
 	uint8_t			*cfdata;
 	uint8_t			*uncompressed;
+	size_t			 cfdata_allocated_size;
 	size_t			 remaining;
 	unsigned		 offset;
 };
@@ -144,8 +119,6 @@ struct cab {
 	unsigned		 opt_compression;
 	int			 opt_compression_level;
 
-	struct la_zstream	 stream;
-
 	struct archive_string_conv *sconv;
 
 	/*
@@ -163,6 +136,11 @@ struct cab {
 		struct cffile	*first;
 		struct cffile	**last;
 	}			 file_list;
+
+#ifdef HAVE_ZLIB_H
+	z_stream		 zstrm;
+	int			 zstrm_valid;
+#endif
 };
 
 static uint32_t cab_checksum_cfdata_4(const void *, size_t, uint32_t);
@@ -182,26 +160,7 @@ static void	file_free(struct cffile *);
 static void	file_register(struct cab *, struct cffile *);
 static void	file_init_register(struct cab *);
 static void	file_free_register(struct cab *);
-static ssize_t	compress_out(struct archive_write *, const void *, size_t ,
-		    enum la_zaction);
-static int	compression_init_encoder_copy(struct archive *,
-		    struct la_zstream *);
-static int	compression_code_copy(struct archive *,
-		    struct la_zstream *, enum la_zaction);
-static int	compression_end_copy(struct archive *, struct la_zstream *);
-static int	compression_init_encoder_mszip(struct archive *,
-		    struct la_zstream *, int);
-#ifdef HAVE_ZLIB_H
-static int	compression_code_mszip(struct archive *,
-		    struct la_zstream *, enum la_zaction);
-static int	compression_end_mszip(struct archive *, struct la_zstream *);
-#endif
-static int	cab_compression_init_encoder(struct archive_write *, unsigned,
-		    int);
-static int	compression_code(struct archive *,
-		    struct la_zstream *, enum la_zaction);
-static int	compression_end(struct archive *,
-		    struct la_zstream *);
+static ssize_t	compress_out(struct archive_write *, const void *, size_t);
 
 int
 archive_write_set_format_cab(struct archive *_a)
@@ -229,7 +188,7 @@ archive_write_set_format_cab(struct archive *_a)
 #if defined(HAVE_ZLIB_H)
 	cab->opt_compression = COMPTYPE_MSZIP;
 #else
-	cab->opt_compression = COMPTYPE_COPY;
+	cab->opt_compression = COMPTYPE_NONE;
 #endif
 	cab->opt_compression_level = 6;
 
@@ -270,7 +229,7 @@ cab_options(struct archive_write *a, const char *key, const char *value)
 #if HAVE_ZLIB_H
 			cab->opt_compression = COMPTYPE_MSZIP;
 #else
-			name = "deflate";
+			name = "mszip";
 #endif
 		else {
 			archive_set_error(&(a->archive),
@@ -362,7 +321,7 @@ cab_write_header(struct archive_write *a, struct archive_entry *entry)
 	if (archive_entry_filetype(entry) == AE_IFLNK) {
 		ssize_t bytes;
 		const void *p = (const void *)archive_entry_symlink(entry);
-		bytes = compress_out(a, p, (size_t)file->size, ARCHIVE_Z_RUN);
+		bytes = compress_out(a, p, (size_t)file->size);
 		if (bytes < 0)
 			return ((int)bytes);
 		cab->entry_bytes_remaining = 0;
@@ -416,90 +375,145 @@ cfdata_out(struct archive_write *a)
 {
 	struct cab *cab = (struct cab *)a->format_data;
 	struct cffolder *cffolder = &(cab->cffolder);
+	size_t compsize, uncompsize;
 	int r;
 
-	cab->stream.next_in = (const unsigned char *)cffolder->uncompressed;
-	cab->stream.avail_in = 0x8000 - cffolder->remaining;
-	cab->stream.total_in = 0;
-	cab->stream.next_out = cffolder->cfdata + 8;
-	cab->stream.avail_out = sizeof(cffolder->cfdata) - 8;
-	cab->stream.total_out = 0;
 	/* Compress file data. */
-	r = compression_code(&(a->archive), &(cab->stream), ARCHIVE_Z_FINISH);
-	if (r != ARCHIVE_OK && r != ARCHIVE_EOF)
-		return (ARCHIVE_FATAL);
-
+	switch (cab->opt_compression) {
+#ifdef HAVE_ZLIB_H
+	case COMPTYPE_MSZIP:
+		cab->zstrm.next_in = cffolder->uncompressed;
+		cab->zstrm.avail_in = 0x8000 - cffolder->remaining;
+		cab->zstrm.total_in = 0;
+		cab->zstrm.next_out = cffolder->cfdata + 8;
+		cab->zstrm.avail_out = cffolder->cfdata_allocated_size - 8;
+		cab->zstrm.total_out = 0;
+		/* Add an MSZIP signature. */
+		*cab->zstrm.next_out++ = 0x43;
+		*cab->zstrm.next_out++ = 0x4b;
+		cab->zstrm.avail_out -= 2;
+		cab->zstrm.total_out = 2;
+		r = deflate(&(cab->zstrm), Z_FINISH);
+		if (r != Z_OK && r != Z_STREAM_END) {
+			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
+			    "Deflate compression failed:"
+			    " deflate() call returned status %d", r);
+			return (ARCHIVE_FATAL);
+		}
+		compsize = (size_t)cab->zstrm.total_out;
+		uncompsize = (size_t)cab->zstrm.total_in;
+		break;
+#endif
+	case COMPTYPE_NONE:
+	default:
+		/* We've already copied the data to cffolder->cfdata. */
+		r = 0;
+		compsize = uncompsize = 0x8000 - cffolder->remaining;
+		break;
+	}
+	
 	/* Write compressed size. */
-	archive_le16enc(cffolder->cfdata + 4, (uint16_t)cab->stream.total_out);
+	archive_le16enc(cffolder->cfdata + 4, (uint16_t)compsize);
 	/* Write uncompressed size. */
-	archive_le16enc(cffolder->cfdata + 6, (uint16_t)cab->stream.total_in);
+	archive_le16enc(cffolder->cfdata + 6, (uint16_t)uncompsize);
 	/* Culculate CFDATA sum. */
-	cffolder->cfdata_sum = cab_checksum_cfdata(
-	    cffolder->cfdata + 8, (size_t)cab->stream.total_out, 0);
-	cffolder->cfdata_sum = cab_checksum_cfdata(cffolder->cfdata+4,
+	cffolder->cfdata_sum = cab_checksum_cfdata(cffolder->cfdata + 8,
+	    compsize, 0);
+	cffolder->cfdata_sum = cab_checksum_cfdata(cffolder->cfdata + 4,
 	    4, cffolder->cfdata_sum);
 	/* Write the sum of CFDATA. */
 	archive_le32enc(cffolder->cfdata, cffolder->cfdata_sum);
 
-	r = write_to_temp(a, cffolder->cfdata,
-		8 + (size_t)cab->stream.total_out);
+	r = write_to_temp(a, cffolder->cfdata, 8 + compsize);
 	if (r != ARCHIVE_OK)
 		return (ARCHIVE_FATAL);
-	cab->total_bytes_compressed += cab->stream.total_in;
-	cab->total_bytes_uncompressed += cab->stream.total_out;
+	cab->total_bytes_compressed += compsize;
+	cab->total_bytes_uncompressed += uncompsize;
 	cffolder->cfdata_count++;
 	cffolder->remaining = 0x8000;
 	return (ARCHIVE_OK);
 }
 
 static ssize_t
-compress_out(struct archive_write *a, const void *buff, size_t s,
-    enum la_zaction run)
+compress_out(struct archive_write *a, const void *buff, size_t s)
 {
 	struct cab *cab = (struct cab *)a->format_data;
 	struct cffolder *cffolder = &(cab->cffolder);
 	const char *b;
+	uint8_t *dist;
 	size_t l, ss;
 	int r;
 
 	if (cffolder->cfdata == NULL && s) {
-		cffolder->cfdata = malloc(8 + 0x8000 + 6144);
-		cffolder->uncompressed = malloc(0x8000);
-		if (cffolder->cfdata == NULL ||
-		    cffolder->uncompressed == NULL) {
-			free(cffolder->cfdata);
-			free(cffolder->uncompressed);
+		cffolder->remaining = 0x8000;
+		cffolder->comptype = cab->opt_compression;
+		cffolder->cfdata_allocated_size = 8 + 0x8000 + 6144;
+		cffolder->cfdata = malloc(cffolder->cfdata_allocated_size);
+		if (cffolder->cfdata == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate memory");
 			return (ARCHIVE_FATAL);
 		}
-		cffolder->remaining = 0x8000;
-		cffolder->comptype = cab->opt_compression;
-		if (cab_compression_init_encoder(a, cab->opt_compression,
-		    cab->opt_compression_level) != ARCHIVE_OK)
-			return (ARCHIVE_FATAL);
+#ifdef HAVE_ZLIB_H
+		if (cab->opt_compression == COMPTYPE_MSZIP) {
+			cffolder->uncompressed = malloc(0x8000);
+			if (cffolder->uncompressed == NULL) {
+				archive_set_error(&a->archive, ENOMEM,
+				    "Can't allocate memory");
+				return (ARCHIVE_FATAL);
+			}
+			if (deflateInit2(&(cab->zstrm),
+			    cab->opt_compression_level, Z_DEFLATED,
+			    -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Internal error initializing "
+				    "compression library");
+				return (ARCHIVE_FATAL);
+			}
+			cab->zstrm_valid = 1;
+		}
+#endif
 	}
 	ss = s;
 	b = buff;
+	switch (cab->opt_compression) {
+#ifdef HAVE_ZLIB_H
+	case COMPTYPE_MSZIP:
+		dist = cffolder->uncompressed; break;
+#endif
+	case COMPTYPE_NONE:
+	default:
+		dist = cffolder->cfdata + 8; break;
+	}
 	while (ss) {
 		l = ss;
 		if (l > cffolder->remaining)
 			l = cffolder->remaining;
-		memcpy(cffolder->uncompressed + (cffolder->offset & 0x7FFF),
-		    b, l);
+		memcpy(dist + (cffolder->offset & 0x7FFF), b, l);
 		ss -= l;
 		cffolder->remaining -= l;
 		cffolder->offset += l;
-		if (cffolder->remaining != 0 && run == ARCHIVE_Z_RUN)
+		if (cffolder->remaining != 0)
 			return (s);
 
 		r = cfdata_out(a);
 		if (r != ARCHIVE_OK)
 			return (r);
 		b += l;
-		if (cab_compression_init_encoder(a, cab->opt_compression,
-		    cab->opt_compression_level) != ARCHIVE_OK)
-			return (ARCHIVE_FATAL);
+#ifdef HAVE_ZLIB_H
+		if (cab->opt_compression == COMPTYPE_MSZIP) {
+			deflateReset(&(cab->zstrm));
+			if (deflateSetDictionary(&(cab->zstrm),
+			    cffolder->uncompressed, 0x8000) != Z_OK) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Internal error initializing "
+				    "compression library");
+				return (ARCHIVE_FATAL);
+			}
+		}
+#endif
 	}
 
 	return (s);
@@ -517,7 +531,7 @@ cab_write_data(struct archive_write *a, const void *buff, size_t s)
 		s = (size_t)cab->entry_bytes_remaining;
 	if (s == 0 || cab->cur_file == NULL)
 		return (0);
-	bytes = compress_out(a, buff, s, ARCHIVE_Z_RUN);
+	bytes = compress_out(a, buff, s);
 	if (bytes < 0)
 		return (bytes);
 	cab->entry_bytes_remaining -= bytes;
@@ -742,14 +756,23 @@ static int
 cab_free(struct archive_write *a)
 {
 	struct cab *cab = (struct cab *)a->format_data;
+	int ret = ARCHIVE_OK;
 
 	file_free_register(cab);
-	compression_end(&(a->archive), &(cab->stream));
 	free(cab->cffolder.cfdata);
 	free(cab->cffolder.uncompressed);
+#ifdef HAVE_ZLIB_H
+	if (cab->zstrm_valid) {
+		if (deflateEnd(&(cab->zstrm)) != Z_OK) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Failed to clean up compressor");
+			ret = ARCHIVE_FATAL;
+		}
+	}
+#endif
 	free(cab);
 
-	return (ARCHIVE_OK);
+	return (ret);
 }
 
 static int
@@ -854,257 +877,6 @@ file_free_register(struct cab *cab)
 		file_free(file);
 		file = file_next;
 	}
-}
-
-#if !defined(HAVE_ZLIB_H)
-static int
-compression_unsupported_encoder(struct archive *a,
-    struct la_zstream *lastrm, const char *name)
-{
-
-	archive_set_error(a, ARCHIVE_ERRNO_MISC,
-	    "%s compression not supported on this platform", name);
-	lastrm->valid = 0;
-	lastrm->real_stream = NULL;
-	return (ARCHIVE_FAILED);
-}
-#endif
-
-/*
- * COMPTYPE_COPY compressor.
- */
-static int
-compression_init_encoder_copy(struct archive *a, struct la_zstream *lastrm)
-{
-
-	if (lastrm->valid)
-		compression_end(a, lastrm);
-	lastrm->valid = 1;
-	lastrm->code = compression_code_copy;
-	lastrm->end = compression_end_copy;
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_code_copy(struct archive *a,
-    struct la_zstream *lastrm, enum la_zaction action)
-{
-	size_t bytes;
-
-	(void)a; /* UNUSED */
-	if (lastrm->avail_out > lastrm->avail_in)
-		bytes = lastrm->avail_in;
-	else
-		bytes = lastrm->avail_out;
-	if (bytes) {
-		memcpy(lastrm->next_out, lastrm->next_in, bytes);
-		lastrm->next_in += bytes;
-		lastrm->avail_in -= bytes;
-		lastrm->total_in += bytes;
-		lastrm->next_out += bytes;
-		lastrm->avail_out -= bytes;
-		lastrm->total_out += bytes;
-	}
-	if (action == ARCHIVE_Z_FINISH && lastrm->avail_in == 0)
-		return (ARCHIVE_EOF);
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_end_copy(struct archive *a, struct la_zstream *lastrm)
-{
-	(void)a; /* UNUSED */
-	lastrm->valid = 0;
-	return (ARCHIVE_OK);
-}
-
-/*
- * COMPTYPE_MSZIP compressor.
- */
-#ifdef HAVE_ZLIB_H
-static int
-compression_init_encoder_mszip(struct archive *a,
-    struct la_zstream *lastrm, int level)
-{
-	z_stream *strm;
-
-	if (lastrm->valid) {
-		struct archive_write *aw;
-		struct cab *cab;
-		struct cffolder *cffolder;
-
-		strm = (z_stream *)lastrm->real_stream;
-		deflateReset(strm);
-
-		aw = (struct archive_write *)a;
-		cab = (struct cab *)aw->format_data;
-		cffolder = &(cab->cffolder);
-		if (deflateSetDictionary(strm,
-		    cffolder->uncompressed, 0x8000) != Z_OK) {
-			archive_set_error(a, ARCHIVE_ERRNO_MISC,
-			    "Internal error initializing compression library");
-			return (ARCHIVE_FATAL);
-		}
-	} else {
-		strm = calloc(1, sizeof(*strm));
-		if (strm == NULL) {
-			archive_set_error(a, ENOMEM,
-			    "Can't allocate memory for gcab stream");
-			return (ARCHIVE_FATAL);
-		}
-		/* zlib.h is not const-correct, so we need this one bit
-		 * of ugly hackery to convert a const * pointer to
-		 * a non-const pointer. */
-		strm->next_in =
-		    (Bytef *)(uintptr_t)(const void *)lastrm->next_in;
-		strm->avail_in = lastrm->avail_in;
-		strm->total_in = (uLong)lastrm->total_in;
-		strm->next_out = lastrm->next_out;
-		strm->avail_out = lastrm->avail_out;
-		strm->total_out = (uLong)lastrm->total_out;
-		if (deflateInit2(strm, level, Z_DEFLATED,
-		    -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-			free(strm);
-			lastrm->real_stream = NULL;
-			archive_set_error(a, ARCHIVE_ERRNO_MISC,
-			    "Internal error initializing compression library");
-			return (ARCHIVE_FATAL);
-		}
-	}
-
-	lastrm->real_stream = strm;
-	lastrm->valid = 1;
-	lastrm->code = compression_code_mszip;
-	lastrm->end = compression_end_mszip;
-
-
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_code_mszip(struct archive *a,
-    struct la_zstream *lastrm, enum la_zaction action)
-{
-	z_stream *strm;
-	int r;
-
-	strm = (z_stream *)lastrm->real_stream;
-	/* zlib.h is not const-correct, so we need this one bit
-	 * of ugly hackery to convert a const * pointer to
-	 * a non-const pointer. */
-	strm->next_in = (Bytef *)(uintptr_t)(const void *)lastrm->next_in;
-	strm->avail_in = lastrm->avail_in;
-	strm->total_in = (uLong)lastrm->total_in;
-	strm->next_out = lastrm->next_out;
-	strm->avail_out = lastrm->avail_out;
-	strm->total_out = (uLong)lastrm->total_out;
-	if (strm->total_out == 0 && strm->avail_out >= 2) {
-		/* Add an MSZIP signature. */
-		*strm->next_out++ = 0x43;
-		*strm->next_out++ = 0x4b;
-		strm->avail_out -= 2;
-		strm->total_out = 2;
-	}
-	r = deflate(strm,
-	    (action == ARCHIVE_Z_FINISH)? Z_FINISH: Z_NO_FLUSH);
-	lastrm->next_in = strm->next_in;
-	lastrm->avail_in = strm->avail_in;
-	lastrm->total_in = strm->total_in;
-	lastrm->next_out = strm->next_out;
-	lastrm->avail_out = strm->avail_out;
-	lastrm->total_out = strm->total_out;
-	switch (r) {
-	case Z_OK:
-		return (ARCHIVE_OK);
-	case Z_STREAM_END:
-		return (ARCHIVE_EOF);
-	default:
-		archive_set_error(a, ARCHIVE_ERRNO_MISC,
-		    "Deflate compression failed:"
-		    " deflate() call returned status %d", r);
-		return (ARCHIVE_FATAL);
-	}
-}
-
-static int
-compression_end_mszip(struct archive *a, struct la_zstream *lastrm)
-{
-	z_stream *strm;
-	int r;
-
-	strm = (z_stream *)lastrm->real_stream;
-	r = deflateEnd(strm);
-	free(strm);
-	lastrm->real_stream = NULL;
-	lastrm->valid = 0;
-	if (r != Z_OK) {
-		archive_set_error(a, ARCHIVE_ERRNO_MISC,
-		    "Failed to clean up compressor");
-		return (ARCHIVE_FATAL);
-	}
-	return (ARCHIVE_OK);
-}
-#else
-static int
-compression_init_encoder_mszip(struct archive *a,
-    struct la_zstream *lastrm, int level)
-{
-
-	(void) level; /* UNUSED */
-	(void) withheader; /* UNUSED */
-	if (lastrm->valid)
-		compression_end(a, lastrm);
-	return (compression_unsupported_encoder(a, lastrm, "mszip"));
-}
-#endif
-
-/*
- * Universal compressor initializer.
- */
-static int
-cab_compression_init_encoder(struct archive_write *a, unsigned compression,
-    int compression_level)
-{
-	struct cab *cab;
-	int r;
-
-	cab = (struct cab *)a->format_data;
-	switch (compression) {
-	case COMPTYPE_MSZIP:
-		r = compression_init_encoder_mszip(
-		        &(a->archive), &(cab->stream), compression_level);
-		break;
-	case COMPTYPE_NONE:
-	default:
-		r = compression_init_encoder_copy(
-		        &(a->archive), &(cab->stream));
-		break;
-	}
-	if (r == ARCHIVE_OK) {
-		cab->stream.total_in = 0;
-		cab->stream.next_out = cab->wbuff;
-		cab->stream.avail_out = sizeof(cab->wbuff);
-		cab->stream.total_out = 0;
-	}
-
-	return (r);
-}
-
-static int
-compression_code(struct archive *a, struct la_zstream *lastrm,
-    enum la_zaction action)
-{
-	if (lastrm->valid)
-		return (lastrm->code(a, lastrm, action));
-	return (ARCHIVE_OK);
-}
-
-static int
-compression_end(struct archive *a, struct la_zstream *lastrm)
-{
-	if (lastrm->valid)
-		return (lastrm->end(a, lastrm));
-	return (ARCHIVE_OK);
 }
 
 static uint32_t
