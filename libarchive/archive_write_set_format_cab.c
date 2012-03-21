@@ -649,7 +649,6 @@ cab_close(struct archive_write *a)
 	struct cffolder *cffolder;
 	struct cffile *file;
 	unsigned char *wb;
-	uint64_t header_offset, header_size;
 	uint32_t length;
 	uint32_t cffile_offset;
 	uint32_t cfdata_offset;
@@ -658,8 +657,6 @@ cab_close(struct archive_write *a)
 	cab = (struct cab *)a->format_data;
 	cffolder = &(cab->cffolder);
 
-	header_offset = header_size = 0;
-	
 	/*
 	 * Flush out remaing CFDATA.
 	 */
