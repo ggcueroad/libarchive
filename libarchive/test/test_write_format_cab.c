@@ -59,9 +59,6 @@ test_basic(const char *compression_type)
 	 * Write an empty file to it.
 	 */
 	assert((ae = archive_entry_new()) != NULL);
-	archive_entry_set_mtime(ae, 1, 10);
-	assertEqualInt(1, archive_entry_mtime(ae));
-	assertEqualInt(10, archive_entry_mtime_nsec(ae));
 	archive_entry_copy_pathname(ae, "empty");
 	assertEqualString("empty", archive_entry_pathname(ae));
 	archive_entry_set_mode(ae, AE_IFREG | 0755);
@@ -74,9 +71,6 @@ test_basic(const char *compression_type)
 	 * Write a file to it.
 	 */
 	assert((ae = archive_entry_new()) != NULL);
-	archive_entry_set_mtime(ae, 1, 100);
-	assertEqualInt(1, archive_entry_mtime(ae));
-	assertEqualInt(100, archive_entry_mtime_nsec(ae));
 	archive_entry_copy_pathname(ae, "file");
 	assertEqualString("file", archive_entry_pathname(ae));
 	archive_entry_set_mode(ae, AE_IFREG | 0755);
@@ -92,9 +86,6 @@ test_basic(const char *compression_type)
 	 * Write another file to it.
 	 */
 	assert((ae = archive_entry_new()) != NULL);
-	archive_entry_set_mtime(ae, 1, 10);
-	assertEqualInt(1, archive_entry_mtime(ae));
-	assertEqualInt(10, archive_entry_mtime_nsec(ae));
 	archive_entry_copy_pathname(ae, "file2");
 	assertEqualString("file2", archive_entry_pathname(ae));
 	archive_entry_set_mode(ae, AE_IFREG | 0755);
@@ -109,9 +100,6 @@ test_basic(const char *compression_type)
 	 * Write a symbolic file to it.
 	 */
 	assert((ae = archive_entry_new()) != NULL);
-	archive_entry_set_mtime(ae, 1, 10);
-	assertEqualInt(1, archive_entry_mtime(ae));
-	assertEqualInt(10, archive_entry_mtime_nsec(ae));
 	archive_entry_copy_pathname(ae, "symbolic");
 	archive_entry_copy_symlink(ae, "file1");
 	assertEqualString("symbolic", archive_entry_pathname(ae));
@@ -125,7 +113,6 @@ test_basic(const char *compression_type)
 	 * Write a directory to it.
 	 */
 	assert((ae = archive_entry_new()) != NULL);
-	archive_entry_set_mtime(ae, 11, 100);
 	archive_entry_copy_pathname(ae, "dir");
 	archive_entry_set_mode(ae, AE_IFDIR | 0755);
 	archive_entry_set_size(ae, 512);
@@ -152,10 +139,6 @@ test_basic(const char *compression_type)
 	 * Read and verify an empty file.
 	 */
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-	assertEqualInt(315532800, archive_entry_mtime(ae));
-	assertEqualInt(0, archive_entry_mtime_nsec(ae));
-	assertEqualInt(0, archive_entry_atime(ae));
-	assertEqualInt(0, archive_entry_ctime(ae));
 	assertEqualString("empty", archive_entry_pathname(ae));
 	assertEqualInt(AE_IFREG | 0777, archive_entry_mode(ae));
 	assertEqualInt(0, archive_entry_size(ae));
@@ -164,10 +147,6 @@ test_basic(const char *compression_type)
 	 * Read and verify first regular file.
 	 */
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-	assertEqualInt(315532800, archive_entry_mtime(ae));
-	assertEqualInt(0, archive_entry_mtime_nsec(ae));
-	assertEqualInt(0, archive_entry_atime(ae));
-	assertEqualInt(0, archive_entry_ctime(ae));
 	assertEqualString("file", archive_entry_pathname(ae));
 	assertEqualInt(AE_IFREG | 0777, archive_entry_mode(ae));
 	assertEqualInt(8, archive_entry_size(ae));
@@ -180,10 +159,6 @@ test_basic(const char *compression_type)
 	 * Read the second regular file back.
 	 */
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-	assertEqualInt(315532800, archive_entry_mtime(ae));
-	assertEqualInt(0, archive_entry_mtime_nsec(ae));
-	assertEqualInt(0, archive_entry_atime(ae));
-	assertEqualInt(0, archive_entry_ctime(ae));
 	assertEqualString("file2", archive_entry_pathname(ae));
 	assertEqualInt(AE_IFREG | 0777, archive_entry_mode(ae));
 	assertEqualInt(4, archive_entry_size(ae));
@@ -195,10 +170,6 @@ test_basic(const char *compression_type)
 	 * Read and verify a symbolic file.
 	 */
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-	assertEqualInt(315532800, archive_entry_mtime(ae));
-	assertEqualInt(0, archive_entry_mtime_nsec(ae));
-	assertEqualInt(0, archive_entry_atime(ae));
-	assertEqualInt(0, archive_entry_ctime(ae));
 	assertEqualString("symbolic", archive_entry_pathname(ae));
 	assertEqualInt(AE_IFREG | 0777, archive_entry_mode(ae));
 	assertEqualInt(5, archive_entry_size(ae));
