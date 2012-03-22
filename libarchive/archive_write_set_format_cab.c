@@ -42,6 +42,17 @@ __FBSDID("$FreeBSD$");
 #include "archive_string.h"
 #include "archive_write_private.h"
 
+struct lzx_enc;
+struct lzx_stream {
+	const unsigned char	*next_in;
+	int64_t			 avail_in;
+	int64_t			 total_in;
+	unsigned char		*next_out;
+	int64_t			 avail_out;
+	int64_t			 total_out;
+	struct lzx_enc		*ds;
+};
+
 /*
  * Cabinet file definitions.
  */
@@ -81,7 +92,7 @@ struct cffolder {
 	uint32_t		 offset_in_cab;
 	uint16_t		 cfdata_count;
 	uint16_t		 comptype;
-	uint16_t		 cmpdata;
+	uint16_t		 compdata;
 	uint32_t		 cfdata_sum;
 
 	uint8_t			*cfdata;
@@ -141,6 +152,8 @@ struct cab {
 	z_stream		 zstrm;
 	int			 zstrm_valid;
 #endif
+	struct lzx_stream	 lzxstrm;
+	int			 lzxstrm_valid;
 };
 
 static uint32_t cab_checksum_cfdata_4(const void *, size_t, uint32_t);
@@ -161,6 +174,9 @@ static void	file_register(struct cab *, struct cffile *);
 static void	file_init_register(struct cab *);
 static void	file_free_register(struct cab *);
 static ssize_t	compress_out(struct archive_write *, const void *, size_t);
+static int	lzx_encode(struct lzx_stream *, int);
+static int	lzx_encode_init(struct lzx_stream *, int);
+static void	lzx_encode_free(struct lzx_stream *);
 
 int
 archive_write_set_format_cab(struct archive *_a)
@@ -231,6 +247,9 @@ cab_options(struct archive_write *a, const char *key, const char *value)
 #else
 			name = "mszip";
 #endif
+		else if (strcmp(value, "lzx") == 0 ||
+		    strcmp(value, "LZX") == 0)
+			cab->opt_compression = COMPTYPE_LZX;
 		else {
 			archive_set_error(&(a->archive),
 			    ARCHIVE_ERRNO_MISC,
@@ -396,14 +415,29 @@ cfdata_out(struct archive_write *a)
 		r = deflate(&(cab->zstrm), Z_FINISH);
 		if (r != Z_OK && r != Z_STREAM_END) {
 			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
-			    "Deflate compression failed:"
-			    " deflate() call returned status %d", r);
+			    "MSZip compression failed: return code %d", r);
 			return (ARCHIVE_FATAL);
 		}
 		compsize = (size_t)cab->zstrm.total_out;
 		uncompsize = (size_t)cab->zstrm.total_in;
 		break;
 #endif
+	case COMPTYPE_LZX:
+		cab->lzxstrm.next_in = cffolder->uncompressed;
+		cab->lzxstrm.avail_in = 0x8000 - cffolder->remaining;
+		cab->lzxstrm.total_in = 0;
+		cab->lzxstrm.next_out = cffolder->cfdata + 8;
+		cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
+		cab->lzxstrm.total_out = 0;
+		r = lzx_encode(&(cab->lzxstrm), 1);
+		if (r != ARCHIVE_OK && r != ARCHIVE_EOF) {
+			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
+			    "LZX compression failed: return code %d", r);
+			return (ARCHIVE_FATAL);
+		}
+		compsize = (size_t)cab->lzxstrm.total_out;
+		uncompsize = (size_t)cab->lzxstrm.total_in;
+		break;
 	case COMPTYPE_NONE:
 	default:
 		/* We've already copied the data to cffolder->cfdata. */
@@ -454,14 +488,17 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 			    "Can't allocate memory");
 			return (ARCHIVE_FATAL);
 		}
-#ifdef HAVE_ZLIB_H
-		if (cab->opt_compression == COMPTYPE_MSZIP) {
+		if (cab->opt_compression == COMPTYPE_MSZIP ||
+		    cab->opt_compression == COMPTYPE_LZX) {
 			cffolder->uncompressed = malloc(0x8000);
 			if (cffolder->uncompressed == NULL) {
 				archive_set_error(&a->archive, ENOMEM,
 				    "Can't allocate memory");
 				return (ARCHIVE_FATAL);
 			}
+		}
+#ifdef HAVE_ZLIB_H
+		if (cab->opt_compression == COMPTYPE_MSZIP) {
 			if (deflateInit2(&(cab->zstrm),
 			    cab->opt_compression_level, Z_DEFLATED,
 			    -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
@@ -474,14 +511,26 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 			cab->zstrm_valid = 1;
 		}
 #endif
+		if (cab->opt_compression == COMPTYPE_LZX) {
+			cffolder->compdata = 21;
+			if (lzx_encode_init(&(cab->lzxstrm),
+			    cffolder->compdata) != ARCHIVE_OK) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Internal error initializing "
+				    "LZX compression");
+				return (ARCHIVE_FATAL);
+			}
+		}
 	}
 	ss = s;
 	b = buff;
 	switch (cab->opt_compression) {
+	case COMPTYPE_LZX:
 #ifdef HAVE_ZLIB_H
 	case COMPTYPE_MSZIP:
-		dist = cffolder->uncompressed; break;
 #endif
+		dist = cffolder->uncompressed; break;
 	case COMPTYPE_NONE:
 	default:
 		dist = cffolder->cfdata + 8; break;
@@ -715,7 +764,7 @@ cab_close(struct archive_write *a)
 	archive_le32enc(wb + CFFOLDER_coffCabStart, cfdata_offset);
 	archive_le16enc(wb + CFFOLDER_cCFData, cffolder->cfdata_count);
 	archive_le16enc(wb + CFFOLDER_typeCompress,
-	    (uint16_t)((cffolder->cmpdata << 8) + cffolder->comptype));
+	    (uint16_t)((cffolder->compdata << 8) + cffolder->comptype));
 	cab->wbuff_remaining -= 8;
 	wb += 8;
 
@@ -770,6 +819,8 @@ cab_free(struct archive_write *a)
 		}
 	}
 #endif
+	if (cab->lzxstrm_valid)
+		lzx_encode_free(&(cab->lzxstrm));
 	free(cab);
 
 	return (ret);
@@ -923,5 +974,303 @@ cab_checksum_cfdata(const void *p, size_t bytes, uint32_t seed)
 	sum ^= t;
 
 	return (sum);
+}
+
+/*****************************************************************
+ *
+ * LZX
+ *
+ *****************************************************************/
+static const int slots[] = {
+	30, 32, 34, 36, 38, 42, 50, 66, 98, 162, 290
+};
+#define SLOT_BASE	15
+#define SLOT_MAX	21/*->25*/
+
+#define VERBATIM_BLOCK		1
+#define ALIGNED_OFFSET_BLOCK	2
+#define UNCOMPRESSED_BLOCK	3
+
+struct lzx_enc {
+	/* Encoding status. */
+	int			 state;
+
+	/*
+	 * Window to see last decoded data, from 32KBi to 2MBi.
+	 */
+	int			 w_size;
+	int			 w_mask;
+	/* Window buffer, which is a loop buffer. */
+	unsigned char		*w_buff;
+	/* The insert position to the window. */
+	int			 w_pos;
+
+	/* Bit stream writer. */
+#define CACHE_BITS	64
+	struct bit_writer {
+		uint64_t	 buff;
+		int		 count;
+		int		 have_odd:5;
+		int		 have_order:1;
+		unsigned	 order_bits;
+		int		 order_n;
+	} bw;
+
+	struct lzx_pos_tbl {
+		int		 base;
+		int		 footer_bits;
+	}			*pos_tbl;
+
+	int			 error;
+};
+
+static void lzx_bw_save_order(struct lzx_enc *, int, unsigned);
+static int	lzx_bw_fill(struct lzx_stream *);
+static int	lzx_bw_fixup(struct lzx_stream *);
+static int	lzx_bw_flush(struct lzx_stream *);
+static int	lzx_bw_putbits(struct lzx_stream *, int, unsigned);
+
+static void
+lzx_bw_save_order(struct lzx_enc *ds, int n, unsigned bits)
+{
+	ds->bw.have_order = 1;
+	ds->bw.order_bits = bits;
+	ds->bw.order_n = n;
+}
+
+static int
+lzx_bw_fill(struct lzx_stream *strm)
+{
+	struct lzx_enc *ds = strm->ds;
+	int i = 8 - ds->bw.have_odd;
+
+	while (strm->avail_out > 1 && ds->bw.have_odd) {
+		strm->next_out[0] = (uint8_t)(ds->bw.buff >> (48 - (i * 8)));
+		strm->next_out[1] = (uint8_t)(ds->bw.buff >> (56 - (i * 8)));
+		strm->next_out += 2;
+		strm->avail_out -= 2;
+		strm->total_out += 2;
+		ds->bw.have_odd -= 2;
+		i += 2;
+	}
+	if (strm->avail_out && ds->bw.have_odd) {
+		*strm->next_out++ = (uint8_t)(ds->bw.buff >> (48 - (i * 8)));
+		strm->avail_out--;
+		strm->total_out++;
+		ds->bw.have_odd--;
+	}
+	if (ds->bw.have_odd == 0)
+		ds->bw.buff = 0;
+	return (strm->avail_out > 0);
+}
+
+static int
+lzx_bw_fixup(struct lzx_stream *strm)
+{
+	struct lzx_enc *ds = strm->ds;
+
+	if (strm->avail_out == 0)
+		return (0);
+	if (ds->bw.have_odd) {
+		if (ds->bw.have_odd & 1) {
+			int i = 8 - ds->bw.have_odd;
+			*strm->next_out++ = (uint8_t)
+				(ds->bw.buff >> (64 - (i * 8)));
+			strm->avail_out--;
+			strm->total_out++;
+			ds->bw.have_odd--;
+			if (ds->bw.have_odd == 0)
+				ds->bw.buff = 0;
+			if (strm->avail_out == 0)
+				return (0);
+		}
+		if (ds->bw.have_odd) {
+			if (lzx_bw_fill(strm) == 0)
+				return (0);
+		}
+	}
+	if (ds->bw.have_order) {
+		int n = ds->bw.order_n;
+		unsigned bits = ds->bw.order_bits;
+
+		ds->bw.order_n = 0;
+		ds->bw.have_order = 0;
+		if (lzx_bw_putbits(strm, n, bits) == 0)
+			return (0);
+	}
+	return (1);
+}
+
+static int
+lzx_bw_flush(struct lzx_stream *strm)
+{
+	struct lzx_enc *ds = strm->ds;
+
+	if (ds->bw.count == CACHE_BITS)
+		return (1);
+	ds->bw.have_odd = (CACHE_BITS - ds->bw.count + 7) >> 3;
+	if (ds->bw.have_odd & 1)
+		ds->bw.have_odd++;
+	ds->bw.buff >>= (8 - ds->bw.have_odd) * 8;
+	return (lzx_bw_fill(strm));
+}
+
+static int
+lzx_bw_putbits(struct lzx_stream *strm, int n, unsigned bits)
+{
+	struct lzx_enc *ds = strm->ds;
+	unsigned x = bits & (0xFFFFFFFF >> (CACHE_BITS - n));
+
+	while (n >= ds->bw.count) {
+		ds->bw.buff |= x >> (n - ds->bw.count);
+		n -= ds->bw.count;
+		ds->bw.count = CACHE_BITS;
+		if (strm->avail_out == 0) {
+			if (n > 0)
+				lzx_bw_save_order(ds, n, x);
+			return (0);
+		} else if (strm->avail_out < sizeof(ds->bw.buff)) {
+			ds->bw.have_odd = sizeof(ds->bw.buff);
+			lzx_bw_fill(strm);
+			if (n > 0)
+				lzx_bw_save_order(ds, n, x);
+			return (0);
+		} else {
+			strm->next_out[0] = (uint8_t)(ds->bw.buff >> 48);
+			strm->next_out[1] = (uint8_t)(ds->bw.buff >> 56);
+			strm->next_out[2] = (uint8_t)(ds->bw.buff >> 32);
+			strm->next_out[3] = (uint8_t)(ds->bw.buff >> 40);
+			strm->next_out[4] = (uint8_t)(ds->bw.buff >> 16);
+			strm->next_out[5] = (uint8_t)(ds->bw.buff >> 24);
+			strm->next_out[6] = (uint8_t)(ds->bw.buff & 0xFF);
+			strm->next_out[7] = (uint8_t)(ds->bw.buff >> 8);
+			strm->next_out += sizeof(ds->bw.buff);
+			strm->avail_out -= sizeof(ds->bw.buff);
+			strm->total_out += sizeof(ds->bw.buff);
+			ds->bw.buff = 0;
+			if (strm->avail_out == 0) {
+				if (n > 0)
+					lzx_bw_save_order(ds, n, x);
+				return (0);
+			}
+		}
+	}
+	if (n > 0)
+		ds->bw.buff |= ((uint64_t)x) << (ds->bw.count -= n);
+	return (1);
+}
+
+static int
+lzx_encode_init(struct lzx_stream *strm, int w_bits)
+{
+	struct lzx_enc *ds;
+	int slot, w_size, w_slot;
+	int base, footer;
+	int base_inc[18];
+
+	if (strm->ds == NULL) {
+		strm->ds = calloc(1, sizeof(*strm->ds));
+		if (strm->ds == NULL)
+			return (ARCHIVE_FATAL);
+	}
+	ds = strm->ds;
+	ds->error = ARCHIVE_FAILED;
+
+	/* Allow bits from 15(32KBi) up to 21(2MBi) */
+	if (w_bits < SLOT_BASE || w_bits > SLOT_MAX)
+		return (ARCHIVE_FAILED);
+
+	ds->error = ARCHIVE_FATAL;
+
+	/*
+	 * Alloc window
+	 */
+	w_size = ds->w_size;
+	w_slot = slots[w_bits - SLOT_BASE];
+	ds->w_size = 1U << w_bits;
+	ds->w_mask = ds->w_size -1;
+	if (ds->w_buff == NULL || w_size != ds->w_size) {
+		free(ds->w_buff);
+		ds->w_buff = malloc(ds->w_size);
+		if (ds->w_buff == NULL)
+			return (ARCHIVE_FATAL);
+		free(ds->pos_tbl);
+		ds->pos_tbl = malloc(sizeof(ds->pos_tbl[0]) * w_slot);
+		if (ds->pos_tbl == NULL)
+			return (ARCHIVE_FATAL);
+//		lzx_huffman_free(&(ds->mt));
+	}
+
+	for (footer = 0; footer < 18; footer++)
+		base_inc[footer] = 1 << footer;
+	base = footer = 0;
+	for (slot = 0; slot < w_slot; slot++) {
+		int n;
+		if (footer == 0)
+			base = slot;
+		else
+			base += base_inc[footer];
+		if (footer < 17) {
+			footer = -2;
+			for (n = base; n; n >>= 1)
+				footer++;
+			if (footer <= 0)
+				footer = 0;
+		}
+		ds->pos_tbl[slot].base = base;
+		ds->pos_tbl[slot].footer_bits = footer;
+	}
+
+	ds->bw.count = CACHE_BITS;
+	ds->error = ARCHIVE_OK;
+
+	return (ARCHIVE_OK);
+}
+
+static void
+lzx_encode_free(struct lzx_stream *strm)
+{
+	if (strm->ds == NULL)
+		return;
+	free(strm->ds->w_buff);
+	free(strm->ds->pos_tbl);
+	free(strm->ds);
+	strm->ds = NULL;
+}
+
+static int
+lzx_encode(struct lzx_stream *strm, int last)
+{
+	struct lzx_enc *ds = strm->ds;
+	int len;
+
+	(void)last;
+	if (ds->error)
+		return (ds->error);
+
+	lzx_bw_putbits(strm, 1, 0);/* Translation = OFF */
+	lzx_bw_putbits(strm, 3, UNCOMPRESSED_BLOCK);/* Block Type. */
+	lzx_bw_putbits(strm, 24, (unsigned)strm->avail_in);/* Size. */
+	/* Align the bit stream by 16 bits. */
+	if ((ds->bw.count & 0xF) == 0)
+		lzx_bw_putbits(strm, 16, 0);
+	else
+		lzx_bw_putbits(strm, ds->bw.count & 0xF, 0);
+	lzx_bw_putbits(strm, 32, 0);/* R0 */
+	lzx_bw_putbits(strm, 32, 0);/* R1 */
+	lzx_bw_putbits(strm, 32, 0);/* R2 */
+	lzx_bw_flush(strm);
+	len = (size_t)strm->avail_in;
+	memcpy(strm->next_out, strm->next_in, len);
+	strm->next_in += len;
+	strm->avail_in -= len;
+	strm->total_in += len;
+	if (len & 1)
+		strm->next_out[len++] = 0;
+	strm->next_out += len;
+	strm->avail_out -= len;
+	strm->total_out += len;
+
+	return (ARCHIVE_EOF);
 }
 
