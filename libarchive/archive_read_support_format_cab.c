@@ -990,7 +990,7 @@ archive_read_format_cab_read_header(struct archive_read *a,
 	if (file->attr & ATTR_RDONLY)
 		archive_entry_set_mode(entry, AE_IFREG | 0555);
 	else
-		archive_entry_set_mode(entry, AE_IFREG | 0777);
+		archive_entry_set_mode(entry, AE_IFREG | 0666);
 	archive_entry_set_mtime(entry, file->mtime, 0);
 
 	cab->entry_bytes_remaining = file->uncompressed_size;
@@ -1031,7 +1031,7 @@ archive_read_format_cab_read_data(struct archive_read *a,
 	if (cab->read_data_invoked == 0) {
 		if (cab->bytes_skipped) {
 			if (cab->entry_cfdata == NULL) {
-				int r = cab_next_cfdata(a);
+				r = cab_next_cfdata(a);
 				if (r < 0)
 					return (r);
 			}
