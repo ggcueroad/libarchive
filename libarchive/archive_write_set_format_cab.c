@@ -1046,24 +1046,6 @@ cab_checksum_cfdata(const void *p, size_t bytes, uint32_t seed)
  * LZX
  *
  *****************************************************************/
-static void	lzx_bw_save_order(struct lzx_enc *, int, unsigned);
-static int	lzx_bw_fill(struct lzx_stream *);
-static int	lzx_bw_fixup(struct lzx_stream *);
-static int	lzx_bw_flush(struct lzx_stream *);
-static int	lzx_bw_putbits(struct lzx_stream *, int, unsigned);
-static int	lzx_find_best_match(struct lzx_stream *, int);
-static void	lzx_find_match_length(struct lzx_match *, int);
-static void	lzx_find_match_overlapping(struct lzx_match *);
-static void	lzx_update_token(struct lzx_match *, int, uint8_t);
-static int	lzx_get_next_pos(struct lzx_match *, int);
-static void	lzx_update_next_pos(struct lzx_match *, int, int);
-static int	lzx_fill_match_buff(struct lzx_stream *, struct lzx_match *);
-static int	lzx_make_tree(struct lzx_enc *, struct lzx_huf_stat *);
-
-static const int slots[] = {
-	30, 32, 34, 36, 38, 42, 50, 66, 98, 162, 290
-};
-
 #define LZX_ST_MATCHING		0
 #define LZX_ST_PUT_BLOCK	1
 
@@ -1185,6 +1167,25 @@ struct lzx_enc {
 
 	int			 error;
 };
+
+static void	lzx_bw_save_order(struct lzx_enc *, int, unsigned);
+static int	lzx_bw_fill(struct lzx_stream *);
+static int	lzx_bw_fixup(struct lzx_stream *);
+static int	lzx_bw_flush(struct lzx_stream *);
+static int	lzx_bw_putbits(struct lzx_stream *, int, unsigned);
+static int	lzx_find_best_match(struct lzx_stream *, int);
+static void	lzx_find_match_length(struct lzx_match *, int);
+static void	lzx_find_match_overlapping(struct lzx_match *);
+static void	lzx_update_token(struct lzx_match *, int, uint8_t);
+static int	lzx_get_next_pos(struct lzx_match *, int);
+static void	lzx_update_next_pos(struct lzx_match *, int, int);
+static int	lzx_fill_match_buff(struct lzx_stream *, struct lzx_match *);
+static int	lzx_make_tree(struct lzx_enc *, struct lzx_huf_stat *);
+
+static const int slots[] = {
+	30, 32, 34, 36, 38, 42, 50, 66, 98, 162, 290
+};
+
 
 static int
 lzx_fill_match_buff(struct lzx_stream *strm, struct lzx_match *m)
@@ -1697,7 +1698,7 @@ lzx_init_huf_stat(struct lzx_huf_stat *hs, int size)
 
 	if (hs->freq == NULL || hs->size < size) {
 		free(hs->freq);
-		hs->freq = calloc(sizeof(hs->freq[0]), size);
+		hs->freq = calloc(sizeof(hs->freq[0]), size << 1);
 		if (hs->freq == NULL)
 			return (-1);
 		free(hs->blen);
@@ -1713,7 +1714,7 @@ lzx_init_huf_stat(struct lzx_huf_stat *hs, int size)
 		if (hs->code == NULL)
 			return (-1);
 	} else {
-		memset(hs->freq, 0, sizeof(hs->freq[0]) * size);
+		memset(hs->freq, 0, sizeof(hs->freq[0]) * (size << 1));
 		memset(hs->blen, 0, sizeof(hs->blen[0]) * size);
 		memset(hs->prev_blen, 0, sizeof(hs->prev_blen[0]) * size);
 	}
@@ -1726,7 +1727,7 @@ static void
 lzx_reset_huf_stat(struct lzx_huf_stat *hs)
 {
 	hs->total_bits = 0;
-	memset(hs->freq, 0, sizeof(hs->freq[0]) * hs->size);
+	memset(hs->freq, 0, sizeof(hs->freq[0]) * (hs->size << 1));
 	memcpy(hs->prev_blen, hs->blen, sizeof(hs->prev_blen[0]) * hs->size);
 	memset(hs->blen, 0, sizeof(hs->blen[0]) * hs->size);
 }
