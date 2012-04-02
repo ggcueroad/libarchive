@@ -42,6 +42,13 @@ __FBSDID("$FreeBSD$");
 #include "archive_string.h"
 #include "archive_write_private.h"
 
+#define LZX_OK			0
+#define LZX_END			1
+#define LZX_EOC			2
+#define LZX_ERR_MISC		-1
+#define LZX_ERR_PARAM		-2
+#define LZX_ERR_MEM		-30
+
 struct lzx_enc;
 struct lzx_stream {
 	const unsigned char	*next_in;
@@ -90,10 +97,10 @@ struct lzx_stream {
 struct cffolder {
 	int			 index;
 	uint32_t		 offset_in_cab;
+	uint16_t		 chunk_count;
 	uint16_t		 cfdata_count;
 	uint16_t		 comptype;
 	uint16_t		 compdata;
-	uint32_t		 cfdata_sum;
 
 	uint8_t			*cfdata;
 	uint8_t			*uncompressed;
@@ -390,81 +397,145 @@ write_to_temp(struct archive_write *a, const void *buff, size_t s)
 }
 
 static int
-cfdata_out(struct archive_write *a)
+write_cfdata(struct archive_write *a, struct cffolder *cffolder,
+    size_t compsize, size_t uncompsize)
+{
+	uint8_t *p = cffolder->cfdata;
+	uint32_t sum;
+
+	/* Write compressed size. */
+	archive_le16enc(p + 4, (uint16_t)compsize);
+	/* Write uncompressed size. */
+	archive_le16enc(p + 6, (uint16_t)uncompsize);
+	/* Calculate CFDATA sum. */
+	sum = cab_checksum_cfdata(p + 8, compsize, 0);
+	sum = cab_checksum_cfdata(p + 4, 4, sum);
+	/* Write the sum of CFDATA. */
+	archive_le32enc(p, sum);
+
+	cffolder->cfdata_count++;
+	cffolder->remaining = 0x8000;
+	return (write_to_temp(a, p, 8 + compsize));
+}
+
+#ifdef HAVE_ZLIB_H
+static int
+cfdata_compress_mszip(struct archive_write *a)
 {
 	struct cab *cab = (struct cab *)a->format_data;
 	struct cffolder *cffolder = &(cab->cffolder);
-	size_t compsize, uncompsize;
 	int r;
 
-	/* Compress file data. */
-	switch (cab->opt_compression) {
-#ifdef HAVE_ZLIB_H
-	case COMPTYPE_MSZIP:
-		cab->zstrm.next_in = cffolder->uncompressed;
-		cab->zstrm.avail_in = 0x8000 - cffolder->remaining;
-		cab->zstrm.total_in = 0;
-		cab->zstrm.next_out = cffolder->cfdata + 8;
-		cab->zstrm.avail_out = cffolder->cfdata_allocated_size - 8;
-		cab->zstrm.total_out = 0;
-		/* Add an MSZIP signature. */
-		*cab->zstrm.next_out++ = 0x43;
-		*cab->zstrm.next_out++ = 0x4b;
-		cab->zstrm.avail_out -= 2;
-		cab->zstrm.total_out = 2;
-		r = deflate(&(cab->zstrm), Z_FINISH);
-		if (r != Z_OK && r != Z_STREAM_END) {
-			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
-			    "MSZip compression failed: return code %d", r);
-			return (ARCHIVE_FATAL);
-		}
-		compsize = (size_t)cab->zstrm.total_out;
-		uncompsize = (size_t)cab->zstrm.total_in;
-		break;
+	cab->zstrm.next_in = cffolder->uncompressed;
+	cab->zstrm.avail_in = 0x8000 - cffolder->remaining;
+	cab->zstrm.total_in = 0;
+	cab->zstrm.next_out = cffolder->cfdata + 8;
+	cab->zstrm.avail_out = cffolder->cfdata_allocated_size - 8;
+	cab->zstrm.total_out = 0;
+	/* Add an MSZIP signature. */
+	*cab->zstrm.next_out++ = 0x43;
+	*cab->zstrm.next_out++ = 0x4b;
+	cab->zstrm.avail_out -= 2;
+	cab->zstrm.total_out = 2;
+	r = deflate(&(cab->zstrm), Z_FINISH);
+	if (r != Z_STREAM_END) {
+		archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
+		    "MSZip compression failed: return code %d", r);
+		return (ARCHIVE_FATAL);
+	}
+
+	deflateReset(&(cab->zstrm));
+	if (deflateSetDictionary(&(cab->zstrm),
+	    cffolder->uncompressed, 0x8000) != Z_OK) {
+		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+		    "Internal error initializing compression library");
+		return (ARCHIVE_FATAL);
+	}
+	r = write_cfdata(a, cffolder, (size_t)cab->zstrm.total_out,
+		(size_t)cab->zstrm.total_in);
+	if (r != ARCHIVE_OK)
+		return (ARCHIVE_FATAL);
+	cab->total_bytes_compressed += cab->zstrm.total_out;
+	cab->total_bytes_uncompressed += cab->zstrm.total_in;
+	return (ARCHIVE_OK);
+}
 #endif
-	case COMPTYPE_LZX:
-		cab->lzxstrm.next_in = cffolder->uncompressed;
-		cab->lzxstrm.avail_in = 0x8000 - cffolder->remaining;
-		cab->lzxstrm.total_in = 0;
-		cab->lzxstrm.next_out = cffolder->cfdata + 8;
-		cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
-		cab->lzxstrm.total_out = 0;
-		r = lzx_encode(&(cab->lzxstrm), 1);
-		if (r != ARCHIVE_OK && r != ARCHIVE_EOF) {
+
+static int
+cfdata_compress_lzx(struct archive_write *a, int last)
+{
+	struct cab *cab = (struct cab *)a->format_data;
+	struct cffolder *cffolder = &(cab->cffolder);
+	size_t usize = 0x8000, last_size;
+	int r;
+
+	cab->lzxstrm.next_in = cffolder->uncompressed;
+	cab->lzxstrm.avail_in = 0x8000 - cffolder->remaining;
+	cab->lzxstrm.total_in = 0;
+	cab->lzxstrm.next_out = cffolder->cfdata + 8;
+	cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
+	cab->lzxstrm.total_out = 0;
+	if (!cab->lzxstrm.avail_in)
+		last_size = 0x8000;
+	else
+		last_size = (size_t)cab->lzxstrm.avail_in;
+	for (;;) {
+		switch (r = lzx_encode(&(cab->lzxstrm), last)) {
+		default:
 			archive_set_error(&(a->archive), ARCHIVE_ERRNO_MISC,
 			    "LZX compression failed: return code %d", r);
 			return (ARCHIVE_FATAL);
+		case LZX_OK: case LZX_END: case LZX_EOC:
+			cab->total_bytes_compressed += cab->lzxstrm.total_out;
+			cab->total_bytes_uncompressed += cab->lzxstrm.total_in;
+			break;
 		}
-		compsize = (size_t)cab->lzxstrm.total_out;
-		uncompsize = (size_t)cab->lzxstrm.total_in;
-		break;
+		if (r == LZX_OK)
+			return (ARCHIVE_OK);
+		if (r == LZX_END)
+			usize = last_size;
+		if (write_cfdata(a, cffolder, (size_t)cab->lzxstrm.total_out,
+		    usize) != ARCHIVE_OK)
+			return (ARCHIVE_FATAL);
+		if (r == LZX_END)
+			return (ARCHIVE_OK);
+		cab->lzxstrm.next_out = cffolder->cfdata + 8;
+		cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
+		cab->lzxstrm.total_in = 0;
+		cab->lzxstrm.total_out = 0;
+	}
+}
+
+static int
+cfdata_out(struct archive_write *a, int last)
+{
+	struct cab *cab = (struct cab *)a->format_data;
+	struct cffolder *cffolder = &(cab->cffolder);
+	size_t uncompsize;
+	int r;
+
+	switch (cab->opt_compression) {
 	case COMPTYPE_NONE:
-	default:
-		/* We've already copied the data to cffolder->cfdata. */
-		r = 0;
-		compsize = uncompsize = 0x8000 - cffolder->remaining;
+		uncompsize = 0x8000 - cffolder->remaining;
+		r = write_cfdata(a, cffolder, uncompsize, uncompsize);
+		if (r != ARCHIVE_OK)
+			return (ARCHIVE_FATAL);
+		cab->total_bytes_compressed += uncompsize;
+		cab->total_bytes_uncompressed += uncompsize;
+		break;
+#ifdef HAVE_ZLIB_H
+	case COMPTYPE_MSZIP:
+		r = cfdata_compress_mszip(a);
+		if (r < 0)
+			return (r);
+		break;
+#endif
+	case COMPTYPE_LZX:
+		r = cfdata_compress_lzx(a, last);
+		if (r < 0)
+			return (r);
 		break;
 	}
-	
-	/* Write compressed size. */
-	archive_le16enc(cffolder->cfdata + 4, (uint16_t)compsize);
-	/* Write uncompressed size. */
-	archive_le16enc(cffolder->cfdata + 6, (uint16_t)uncompsize);
-	/* Culculate CFDATA sum. */
-	cffolder->cfdata_sum = cab_checksum_cfdata(cffolder->cfdata + 8,
-	    compsize, 0);
-	cffolder->cfdata_sum = cab_checksum_cfdata(cffolder->cfdata + 4,
-	    4, cffolder->cfdata_sum);
-	/* Write the sum of CFDATA. */
-	archive_le32enc(cffolder->cfdata, cffolder->cfdata_sum);
-
-	r = write_to_temp(a, cffolder->cfdata, 8 + compsize);
-	if (r != ARCHIVE_OK)
-		return (ARCHIVE_FATAL);
-	cab->total_bytes_compressed += compsize;
-	cab->total_bytes_uncompressed += uncompsize;
-	cffolder->cfdata_count++;
-	cffolder->remaining = 0x8000;
 	return (ARCHIVE_OK);
 }
 
@@ -488,8 +559,7 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 			    "Can't allocate memory");
 			return (ARCHIVE_FATAL);
 		}
-		if (cab->opt_compression == COMPTYPE_MSZIP ||
-		    cab->opt_compression == COMPTYPE_LZX) {
+		if (cab->opt_compression != COMPTYPE_NONE) {
 			cffolder->uncompressed = malloc(0x8000);
 			if (cffolder->uncompressed == NULL) {
 				archive_set_error(&a->archive, ENOMEM,
@@ -497,8 +567,27 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 				return (ARCHIVE_FATAL);
 			}
 		}
+	}
+
+	switch (cab->opt_compression) {
+	case COMPTYPE_LZX:
+		if (!cab->lzxstrm_valid && s) {
+			cffolder->compdata = 21;
+			if (lzx_encode_init(&(cab->lzxstrm),
+			    cffolder->compdata) != ARCHIVE_OK) {
+				archive_set_error(&a->archive,
+				    ARCHIVE_ERRNO_MISC,
+				    "Internal error initializing "
+				    "LZX compression");
+				return (ARCHIVE_FATAL);
+			}
+			cab->lzxstrm_valid = 1;
+		}
+		dist = cffolder->uncompressed;
+		break;
 #ifdef HAVE_ZLIB_H
-		if (cab->opt_compression == COMPTYPE_MSZIP) {
+	case COMPTYPE_MSZIP:
+		if (!cab->zstrm_valid && s) {
 			if (deflateInit2(&(cab->zstrm),
 			    cab->opt_compression_level, Z_DEFLATED,
 			    -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
@@ -510,31 +599,17 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 			}
 			cab->zstrm_valid = 1;
 		}
+		dist = cffolder->uncompressed;
+		break;
 #endif
-		if (cab->opt_compression == COMPTYPE_LZX) {
-			cffolder->compdata = 21;
-			if (lzx_encode_init(&(cab->lzxstrm),
-			    cffolder->compdata) != ARCHIVE_OK) {
-				archive_set_error(&a->archive,
-				    ARCHIVE_ERRNO_MISC,
-				    "Internal error initializing "
-				    "LZX compression");
-				return (ARCHIVE_FATAL);
-			}
-		}
+	case COMPTYPE_NONE:
+	default:
+		dist = cffolder->cfdata + 8;
+		break;
 	}
 	ss = s;
 	b = buff;
-	switch (cab->opt_compression) {
-	case COMPTYPE_LZX:
-#ifdef HAVE_ZLIB_H
-	case COMPTYPE_MSZIP:
-#endif
-		dist = cffolder->uncompressed; break;
-	case COMPTYPE_NONE:
-	default:
-		dist = cffolder->cfdata + 8; break;
-	}
+
 	while (ss) {
 		l = ss;
 		if (l > cffolder->remaining)
@@ -546,23 +621,11 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 		if (cffolder->remaining != 0)
 			return (s);
 
-		r = cfdata_out(a);
+		cffolder->chunk_count++;
+		r = cfdata_out(a, 0);
 		if (r != ARCHIVE_OK)
 			return (r);
 		b += l;
-#ifdef HAVE_ZLIB_H
-		if (cab->opt_compression == COMPTYPE_MSZIP) {
-			deflateReset(&(cab->zstrm));
-			if (deflateSetDictionary(&(cab->zstrm),
-			    cffolder->uncompressed, 0x8000) != Z_OK) {
-				archive_set_error(&a->archive,
-				    ARCHIVE_ERRNO_MISC,
-				    "Internal error initializing "
-				    "compression library");
-				return (ARCHIVE_FATAL);
-			}
-		}
-#endif
 	}
 
 	return (s);
@@ -723,8 +786,10 @@ cab_close(struct archive_write *a)
 	/*
 	 * Flush out remaing CFDATA.
 	 */
-	if (cffolder->cfdata != NULL && cffolder->remaining < 0x8000) {
-		r = cfdata_out(a);
+	if (cffolder->cfdata != NULL &&
+	    (cffolder->remaining < 0x8000 ||
+	     cab->opt_compression == COMPTYPE_LZX)) {
+		r = cfdata_out(a, 1);
 		if (r != ARCHIVE_OK)
 			return (r);
 	}
@@ -981,32 +1046,51 @@ cab_checksum_cfdata(const void *p, size_t bytes, uint32_t seed)
  * LZX
  *
  *****************************************************************/
+static void	lzx_bw_save_order(struct lzx_enc *, int, unsigned);
+static int	lzx_bw_fill(struct lzx_stream *);
+static int	lzx_bw_fixup(struct lzx_stream *);
+static int	lzx_bw_flush(struct lzx_stream *);
+static int	lzx_bw_putbits(struct lzx_stream *, int, unsigned);
+static int	lzx_find_best_match(struct lzx_stream *, int);
+static void	lzx_find_match_length(struct lzx_match *, int);
+static void	lzx_find_match_overlapping(struct lzx_match *);
+static void	lzx_update_token(struct lzx_match *, int, uint8_t);
+static int	lzx_get_next_pos(struct lzx_match *, int);
+static void	lzx_update_next_pos(struct lzx_match *, int, int);
+static int	lzx_fill_match_buff(struct lzx_stream *, struct lzx_match *);
+static int	lzx_make_tree(struct lzx_enc *, struct lzx_huf_stat *);
+
 static const int slots[] = {
 	30, 32, 34, 36, 38, 42, 50, 66, 98, 162, 290
 };
-#define SLOT_BASE	15
-#define SLOT_MAX	21/*->25*/
+
+#define LZX_ST_MATCHING		0
+#define LZX_ST_PUT_BLOCK	1
+
+#define SLOT_BASE		15
+#define SLOT_MAX		21/*->25*/
+
+#define MATCH_MIN		2
+#define MATCH_MAX		257
+#define MATCH_TOKEN_BITS	(12)
+#define MATCH_HASH_SIZE		(1 << MATCH_TOKEN_BITS)
+
+#define CACHE_BITS		64
+#define CHUNK_SIZE		0x8000
 
 #define VERBATIM_BLOCK		1
 #define ALIGNED_OFFSET_BLOCK	2
 #define UNCOMPRESSED_BLOCK	3
 
+#define TREE_MAX		(256 + (289<<3))
+
 struct lzx_enc {
 	/* Encoding status. */
 	int			 state;
+	int			 block_state;
 
-	/*
-	 * Window to see last decoded data, from 32KBi to 2MBi.
-	 */
-	int			 w_size;
-	int			 w_mask;
-	/* Window buffer, which is a loop buffer. */
-	unsigned char		*w_buff;
-	/* The insert position to the window. */
-	int			 w_pos;
 
 	/* Bit stream writer. */
-#define CACHE_BITS	64
 	struct bit_writer {
 		uint64_t	 buff;
 		int		 count;
@@ -1014,21 +1098,466 @@ struct lzx_enc {
 		int		 have_order:1;
 		unsigned	 order_bits;
 		int		 order_n;
-	} bw;
+	}			 bw;
 
-	struct lzx_pos_tbl {
-		int		 base;
-		int		 footer_bits;
-	}			*pos_tbl;
+	/*
+	 * Position slot table.
+	 */
+	int32_t			*base_pos;
+	uint8_t			*footer_bits;
+
+	struct lzx_huf_stat {
+		int		 size;
+		int		 total_bits;
+		uint16_t	*freq;
+		uint8_t		*blen;
+		uint8_t		*prev_blen;
+		uint16_t	*code;
+	}			 mt,lt,at, pt;
+
+	struct lzx_huf_tree {
+		int16_t		*heap;
+		uint16_t	 len_cnt[17];
+		uint16_t	*left;
+		uint16_t	*right;
+	}			 huf_tree;
+
+	uint16_t		*mt_data;
+	int			 mt_pos;
+	int			 mt_max;
+	int			 mt_rp;
+	uint8_t			*lt_data;
+	int			 lt_pos;
+	int			 lt_max;
+	int			 lt_rp;
+	uint16_t		*ft_data;
+	int			 ft_pos;
+	int			 ft_max;
+	int			 ft_rp;
+	uint8_t			*pt_data;
+	int			 pt_pos;
+	int			 pt_max;
+	int			 loop;
+	int			 verbatim_bits;
+	int			 aligned_offset_bits;
+
+	struct lzx_match {
+		enum _match_state {
+			MATCH_FIRST_BYTE = 0,
+			MATCH_FILL,
+			MATCH_FINDING,
+			MATCH_PENDING,
+			MATCH_END
+		}		 state;
+		int		 rp_finding;
+
+		int		 w_bits;
+		int		 w_size;
+		int		 w_mask;
+		/* The insert position to the window. */
+		int		 w_pos;
+		/* Window buffer, which is a loop buffer and takes 
+		 * from 32KBi to 2MBi. */
+		uint8_t		*w_buff;
+
+		/* Matching buffer. */
+		uint8_t		*buff;
+		uint8_t		*buff_top;
+
+		int32_t		*hash_tbl;
+		uint8_t		*link;
+		int		 buff_avail;
+		int		 r0;
+		int		 r1;
+		int		 r2;
+		int		 pos;
+		int		 len;
+		int		 chunk_remaining_bytes;
+		uint16_t	 token;
+	}			 match;
+
+	int			 block_bytes;
+	int			 block_remaining_bytes;
+	int			 block_singles;
+	int			 chunk_bytes_out;
+	int			(*output_block)(struct lzx_stream *);
+	int			 make_aligned_offset_block;
 
 	int			 error;
 };
 
-static void lzx_bw_save_order(struct lzx_enc *, int, unsigned);
-static int	lzx_bw_fill(struct lzx_stream *);
-static int	lzx_bw_fixup(struct lzx_stream *);
-static int	lzx_bw_flush(struct lzx_stream *);
-static int	lzx_bw_putbits(struct lzx_stream *, int, unsigned);
+static int
+lzx_fill_match_buff(struct lzx_stream *strm, struct lzx_match *m)
+{
+	int l;
+
+	if (0 == m->chunk_remaining_bytes)
+		return (0);
+	if (strm->avail_in <= 0)
+		return (-1);
+	l = MATCH_MAX - m->buff_avail;
+	if (l > strm->avail_in)
+		l = (int)strm->avail_in;
+	if (l > m->chunk_remaining_bytes)
+		l = (int)m->chunk_remaining_bytes;
+	if (m->buff_top != m->buff) {
+		memmove(m->buff_top, m->buff, m->buff_avail);
+		m->buff = m->buff_top;
+	}
+	memcpy(m->buff + m->buff_avail, strm->next_in, l);
+	m->buff_avail += l;
+	m->chunk_remaining_bytes -= l;
+	strm->avail_in -= l;
+	strm->next_in += l;
+	
+	if (0 == m->chunk_remaining_bytes)
+		return (0);
+	return ((MATCH_MAX ==  m->buff_avail)?0:-1);
+}
+
+#define lzx_make_token(c1, c2)		\
+		((((uint16_t)((~(c1))&0xff))<<4) ^ (uint16_t)(c2))
+
+static void
+lzx_update_next_pos(struct lzx_match *m, int pos, int next_pos)
+{
+	int w_bits = m->w_bits;
+	int bits = pos * w_bits;
+	int idx = bits >> 3;
+	int b, mask;
+
+	b = 8 - (pos & 0x7);
+	if (b < 8) {
+		mask = (1 << b) -1;
+		m->link[idx] &= ~mask;
+		m->link[idx] |= next_pos >> (w_bits - b);
+	} else
+		m->link[idx] = next_pos >> (w_bits - 8);
+	idx++;
+	b += 8;
+	while (b < w_bits) {
+		m->link[idx++] = next_pos >> (w_bits - b);
+		b += 8;
+	}
+	b = w_bits - b + 8;
+	if (b > 0) {
+		mask = ((1 << b) -1) << (8 - b);
+		m->link[idx] &= ~mask;
+		m->link[idx] |= (next_pos & 0xff) << (8 -b);
+	}
+}
+
+static int
+lzx_get_next_pos(struct lzx_match *m, int pos)
+{
+	int w_bits = m->w_bits;
+	int bits = pos * w_bits;
+	int idx = bits >> 3;
+	int b, mask;
+	int next;
+
+	b = 8 - (pos & 0x7);
+	if (b < 8) {
+		mask = (1 << b) -1;
+		next = ((int)(m->link[idx] & mask)) << (w_bits - b);
+	} else
+		next = ((int)m->link[idx]) << (w_bits - 8);
+	idx++;
+	b += 8;
+	while (b < w_bits) {
+		next |= m->link[idx++] << (w_bits - b);
+		b += 8;
+	}
+	b = w_bits - b + 8;
+	if (b > 0) {
+		mask = ((1 << b) -1) << (8 - b);
+		next |= ((int)(m->link[idx+1] & mask)) >> (8 - b);
+	}
+	return (next);
+}
+
+static void
+lzx_update_token(struct lzx_match *m, int pos, uint8_t c)
+{
+	int32_t prev;
+	uint16_t token;
+
+	/* Update hash data of the last byte. */
+	token = lzx_make_token(m->w_buff[pos], c);
+	prev = m->hash_tbl[token];
+	m->hash_tbl[token] = pos;
+	if (prev == -1)
+		prev = pos;
+	lzx_update_next_pos(m, pos, prev);
+}
+
+static void
+lzx_find_match_overlapping(struct lzx_match *m)
+{
+	uint8_t *m_buff = m->buff, *front;
+	int avail = m->buff_avail;
+	int l = m->len;
+
+	front = m_buff - ((m->w_pos - m->pos) & m->w_mask);
+	while (l < avail && front[l] == m_buff[l])
+		l++;
+	m->len = l;
+}
+
+static void
+lzx_find_match_length(struct lzx_match *m, int pos)
+{
+	uint8_t *w_buff = m->w_buff;
+	uint8_t *m_buff = m->buff;
+	int w_mask = m->w_mask;
+	int avail, distance, l, p;
+
+	distance = (m->w_pos - pos) & w_mask;
+	if (m->len < MATCH_MIN) {
+		avail = m->buff_avail;
+		if (avail > distance)
+			avail = distance;
+		l = 0;
+		p = pos;
+		while (l < avail && w_buff[p] == m_buff[l]) {
+			p = (p + 1) & w_mask;
+			l++;
+		}
+		if (l > m->len) {
+			m->pos = pos;
+			m->len = l;
+			if (l == distance)
+				lzx_find_match_overlapping(m);
+		}
+	} else {
+		l = m->len;
+		if (l >= distance) {
+			/* Find match bytes overlapping. */
+			lzx_find_match_overlapping(m);
+		} else {
+			/* Matching bytes from the tail to the head. */
+			p = (pos + l) & w_mask;
+			while (l >= 0 && w_buff[p] == m_buff[l]) {
+				p = (p - 1) & w_mask;
+				l--;
+			}
+			if (l < 0) {
+				avail = m->buff_avail;
+				if (avail > distance)
+					avail = distance;
+				l = m->len + 1;
+				p = (pos + l) & w_mask;
+				while (l < avail && w_buff[p] == m_buff[l]) {
+					p = (p + 1) & w_mask;
+					l++;
+				}
+				m->pos = pos;
+				m->len = l;
+				if (l == distance)
+					lzx_find_match_overlapping(m);
+			}
+		}
+	}
+}
+
+static int
+lzx_find_best_match(struct lzx_stream *strm, int last)
+{
+	struct lzx_match *m = &strm->ds->match;
+	uint8_t *w_buff = m->w_buff;
+	int c, w_mask = m->w_mask;
+	int32_t pos;
+	uint16_t token, xtoken;
+	int rp_finding;
+
+	if (m->state == MATCH_FIRST_BYTE) {
+		if (strm->avail_in <= 0)
+			return (-1);
+		/* The first byte, this is a single. */
+		c = *strm->next_in++;
+		m->chunk_remaining_bytes--;
+		strm->avail_in--;
+		w_buff[++m->w_pos] = c;
+		m->state = MATCH_FILL;
+		return (c);
+	}
+
+	if (m->buff_avail < MATCH_MAX) {
+		if (lzx_fill_match_buff(strm, m) != 0 && !last)
+			return (-1);
+		if (m->buff_avail == 0 &&
+			m->chunk_remaining_bytes == 0 && !last) {
+			m->chunk_remaining_bytes = CHUNK_SIZE;
+			if (lzx_fill_match_buff(strm, m) != 0 && !last)
+				return (-1);
+		}
+		if (m->buff_avail == 0) {
+			m->state = MATCH_END;
+			return (-2);
+		} else if (m->buff_avail == 1) {
+			/* The last byte, this is a single. */
+			c = m->buff[0];
+			m->buff_avail = 0;
+			return (c);
+		}
+	}
+
+	if (m->state != MATCH_PENDING) {
+		int ppos;
+
+		m->state = MATCH_FINDING;
+		ppos = m->w_pos;
+		/* Update hash data of the last byte. */
+		lzx_update_token(m, ppos, m->buff[0]);
+		m->w_pos = (ppos + 1) & w_mask;
+
+		m->len = 0;
+		token = lzx_make_token(m->buff[0], m->buff[1]);
+		pos = m->hash_tbl[token];
+
+		/* Check if the position the hash table holds is outdated. */
+		if (pos != -1 && pos != ppos) {
+			xtoken = lzx_make_token(w_buff[pos],
+					w_buff[(pos+1) & w_mask]);
+			if (xtoken != token) {
+				/* Mark as no links. */
+				m->hash_tbl[token] = -1;
+				pos = -1;
+			}
+		}
+
+		/* Check if the position is proper range. */
+		if (((m->w_pos - pos) & w_mask) > m->w_size -3)
+			pos = -1;/* Out of range. */
+
+		if (pos == -1) {
+			/* There isn't the same token, this is a single. */
+			c = *m->buff++;
+			m->buff_avail--;
+			w_buff[m->w_pos] = c;
+			return (c);
+		}
+		m->token = token;
+		rp_finding = 1;/* Find repeated positions. */
+	} else {
+		m->state = MATCH_FINDING;
+		token = m->token;
+		pos = m->pos;
+		rp_finding = 5;
+	}
+
+	for (;;) {
+		int next, next_distance, pos_distance;
+
+		/*
+		 * First of all, find repeated positions to reduece
+		 * compressed data.
+		 */
+		switch (rp_finding) {
+		case 0: break;
+		case 1:
+			++rp_finding;
+			pos = (m->w_pos - m->r0) & w_mask;
+			break;
+		case 2:
+			++rp_finding;
+			if (m->r1 != m->r0) {
+				pos = (m->w_pos - m->r1) & w_mask;
+				break;
+			}
+			/* FALL THROUGH */
+		case 3:
+			++rp_finding;
+			if (m->r2 != m->r0 && m->r2 != m->r1) {
+				pos = (m->w_pos - m->r2) & w_mask;
+				break;
+			}
+			/* FALL THROUGH */
+		case 4:
+			rp_finding = 0;
+			token = m->token;
+			pos = m->hash_tbl[token];
+			break;
+		case 5:
+			rp_finding = m->rp_finding;
+			break;
+		}
+	
+		lzx_find_match_length(m, pos);
+		if (m->len == MATCH_MAX)
+			break;	/* We've got enough matching bytes. */
+
+		/* If it is a shortage of matching buffer, we have to
+		 * fill it up. */
+		if (m->len == m->buff_avail) {
+			if (lzx_fill_match_buff(strm, m) != 0 && !last) {
+				m->state = MATCH_PENDING;
+				m->rp_finding = rp_finding;
+				return (-1);
+			}
+			if (m->len == m->buff_avail)
+				break;
+		}
+		if (rp_finding)
+			continue;
+
+		next = lzx_get_next_pos(m, pos);
+
+		/* If next position is the same, it means that the hash
+		 * link is the end, stop matching. */
+		if (next == pos)
+			break;
+
+		/* Next position is outdated if that is nearer than the
+		 * current position or longer than WINDOW_SIZE-3. */
+		next_distance = (m->w_pos - next) & w_mask;
+		pos_distance = (m->w_pos - pos) & w_mask;
+		if (pos_distance > next_distance ||
+		    next_distance > (m->w_size - 3)) {
+			/* Mark next position as the terminal. */
+			lzx_update_next_pos(m, pos, pos);
+			break;
+		}
+
+		/* If the token is different, next position is outdated. */
+		xtoken = lzx_make_token(w_buff[next], w_buff[(next+1)&w_mask]);
+		if (xtoken != token) {
+			/* Mark next position as the terminal. */
+			lzx_update_next_pos(m, pos, pos);
+			break;
+		}
+
+		pos = next;
+	}
+	m->rp_finding = rp_finding;
+
+	if (m->len < MATCH_MIN) {
+		/* There isn't the same pattern, this is a single. */
+		c = *m->buff++;
+		m->buff_avail--;
+		w_buff[m->w_pos] = c;
+		return (c);
+	} else {
+		int mlen;
+		int w_pos = m->w_pos;
+		uint8_t *m_buff = m->buff;
+
+		/* Make the tokens of the matched pattern. */
+		for (mlen = m->len; mlen > 1; mlen--) {
+			w_buff[w_pos] = *m_buff++;
+			lzx_update_token(m, w_pos, m_buff[0]);
+			w_pos = (w_pos + 1) & w_mask;
+		}
+		/* The last bytes of the matched pattern is just copied. */
+		w_buff[w_pos] = *m_buff++;
+		m->buff = m_buff;
+		m->buff_avail -= m->len;
+		/* Convert an absolute position to an offset position. */
+		m->pos = (m->w_pos - m->pos) & w_mask;
+		m->w_pos = w_pos;
+		return (256);
+	}
+}
 
 static void
 lzx_bw_save_order(struct lzx_enc *ds, int n, unsigned bits)
@@ -1069,9 +1598,9 @@ lzx_bw_fixup(struct lzx_stream *strm)
 {
 	struct lzx_enc *ds = strm->ds;
 
-	if (strm->avail_out == 0)
-		return (0);
 	if (ds->bw.have_odd) {
+		if (strm->avail_out == 0)
+			return (0);
 		if (ds->bw.have_odd & 1) {
 			int i = 8 - ds->bw.have_odd;
 			*strm->next_out++ = (uint8_t)
@@ -1093,6 +1622,8 @@ lzx_bw_fixup(struct lzx_stream *strm)
 		int n = ds->bw.order_n;
 		unsigned bits = ds->bw.order_bits;
 
+		if (strm->avail_out == 0)
+			return (0);
 		ds->bw.order_n = 0;
 		ds->bw.have_order = 0;
 		if (lzx_bw_putbits(strm, n, bits) == 0)
@@ -1161,45 +1692,69 @@ lzx_bw_putbits(struct lzx_stream *strm, int n, unsigned bits)
 }
 
 static int
-lzx_encode_init(struct lzx_stream *strm, int w_bits)
+lzx_init_huf_stat(struct lzx_huf_stat *hs, int size)
 {
-	struct lzx_enc *ds;
-	int slot, w_size, w_slot;
+
+	if (hs->freq == NULL || hs->size < size) {
+		free(hs->freq);
+		hs->freq = calloc(sizeof(hs->freq[0]), size);
+		if (hs->freq == NULL)
+			return (-1);
+		free(hs->blen);
+		hs->blen = calloc(sizeof(hs->blen[0]), size);
+		if (hs->blen == NULL)
+			return (-1);
+		free(hs->prev_blen);
+		hs->prev_blen = calloc(sizeof(hs->prev_blen[0]), size);
+		if (hs->prev_blen == NULL)
+			return (-1);
+		free(hs->code);
+		hs->code = malloc(sizeof(hs->code[0]) * size);
+		if (hs->code == NULL)
+			return (-1);
+	} else {
+		memset(hs->freq, 0, sizeof(hs->freq[0]) * size);
+		memset(hs->blen, 0, sizeof(hs->blen[0]) * size);
+		memset(hs->prev_blen, 0, sizeof(hs->prev_blen[0]) * size);
+	}
+	hs->size = size;
+	hs->total_bits = 0;
+	return (0);
+}
+
+static void
+lzx_reset_huf_stat(struct lzx_huf_stat *hs)
+{
+	hs->total_bits = 0;
+	memset(hs->freq, 0, sizeof(hs->freq[0]) * hs->size);
+	memcpy(hs->prev_blen, hs->blen, sizeof(hs->prev_blen[0]) * hs->size);
+	memset(hs->blen, 0, sizeof(hs->blen[0]) * hs->size);
+}
+
+static void
+lzx_free_huf_stat(struct lzx_huf_stat *hs)
+{
+	free(hs->freq);
+	free(hs->blen);
+	free(hs->prev_blen);
+	free(hs->code);
+}
+
+static int
+lzx_make_slot_table(struct lzx_enc *ds, int w_slot)
+{
+	int slot;
 	int base, footer;
 	int base_inc[18];
 
-	if (strm->ds == NULL) {
-		strm->ds = calloc(1, sizeof(*strm->ds));
-		if (strm->ds == NULL)
-			return (ARCHIVE_FATAL);
-	}
-	ds = strm->ds;
-	ds->error = ARCHIVE_FAILED;
-
-	/* Allow bits from 15(32KBi) up to 21(2MBi) */
-	if (w_bits < SLOT_BASE || w_bits > SLOT_MAX)
-		return (ARCHIVE_FAILED);
-
-	ds->error = ARCHIVE_FATAL;
-
-	/*
-	 * Alloc window
-	 */
-	w_size = ds->w_size;
-	w_slot = slots[w_bits - SLOT_BASE];
-	ds->w_size = 1U << w_bits;
-	ds->w_mask = ds->w_size -1;
-	if (ds->w_buff == NULL || w_size != ds->w_size) {
-		free(ds->w_buff);
-		ds->w_buff = malloc(ds->w_size);
-		if (ds->w_buff == NULL)
-			return (ARCHIVE_FATAL);
-		free(ds->pos_tbl);
-		ds->pos_tbl = malloc(sizeof(ds->pos_tbl[0]) * w_slot);
-		if (ds->pos_tbl == NULL)
-			return (ARCHIVE_FATAL);
-//		lzx_huffman_free(&(ds->mt));
-	}
+	free(ds->base_pos);
+	ds->base_pos = malloc(sizeof(ds->base_pos[0]) * w_slot);
+	if (ds->base_pos == NULL)
+		return (-1);
+	free(ds->footer_bits);
+	ds->footer_bits = malloc(sizeof(ds->footer_bits[0]) * w_slot);
+	if (ds->footer_bits == NULL)
+		return (-1);
 
 	for (footer = 0; footer < 18; footer++)
 		base_inc[footer] = 1 << footer;
@@ -1217,14 +1772,136 @@ lzx_encode_init(struct lzx_stream *strm, int w_bits)
 			if (footer <= 0)
 				footer = 0;
 		}
-		ds->pos_tbl[slot].base = base;
-		ds->pos_tbl[slot].footer_bits = footer;
+		ds->base_pos[slot] = (int32_t)base;
+		ds->footer_bits[slot] = (uint8_t)footer;
+	}
+	return (0);
+}
+
+static int
+lzx_encode_init(struct lzx_stream *strm, int w_bits)
+{
+	struct lzx_enc *ds;
+	int w_size, w_slot;
+	int size;
+
+	if (strm->ds == NULL) {
+		strm->ds = calloc(1, sizeof(*strm->ds));
+		if (strm->ds == NULL)
+			return (LZX_ERR_MEM);
+	}
+	ds = strm->ds;
+	ds->error = LZX_ERR_PARAM;
+
+	/* Allow bits from 15(32KBi) up to 21(2MBi) */
+	if (w_bits < SLOT_BASE || w_bits > SLOT_MAX)
+		return (LZX_ERR_PARAM);
+
+	ds->error = LZX_ERR_MEM;
+
+	/*
+	 * Alloc window
+	 */
+	w_size = ds->match.w_size;
+	w_slot = slots[w_bits - SLOT_BASE];
+	ds->match.w_bits = w_bits;
+	ds->match.w_size = 1U << w_bits;
+	ds->match.w_mask = ds->match.w_size -1;
+	if (ds->match.w_buff == NULL || w_size != ds->match.w_size) {
+		free(ds->match.w_buff);
+		ds->match.w_buff = malloc(ds->match.w_size);
+		if (ds->match.w_buff == NULL)
+			goto error;
+		free(ds->huf_tree.heap);
+		ds->huf_tree.heap =
+		    malloc(sizeof(ds->huf_tree.heap[0])
+				* (256 + (w_slot << 3) + 1));
+		if (ds->huf_tree.heap == NULL)
+			goto error;
+		free(ds->huf_tree.left);
+		ds->huf_tree.left =
+		    malloc(sizeof(ds->huf_tree.left[0])
+				* (256 + (w_slot << 3) +1));
+		if (ds->huf_tree.left == NULL)
+			goto error;
+		free(ds->huf_tree.right);
+		ds->huf_tree.right =
+		    malloc(sizeof(ds->huf_tree.right[0])
+				* (256 + (w_slot << 3) +1));
+		if (ds->huf_tree.right == NULL)
+			goto error;
+		if (lzx_make_slot_table(ds, w_slot) < 0)
+			goto error;
+	}
+
+	if (lzx_init_huf_stat(&ds->mt, (w_slot << 3) + 256) < 0)
+		goto error;
+	if (lzx_init_huf_stat(&ds->lt, 249) < 0)
+		goto error;
+	if (lzx_init_huf_stat(&ds->at, 8) < 0)
+		goto error;
+
+	if (ds->mt_max == 0) {
+		ds->mt_max = 0x4000;
+		ds->mt_data = malloc(ds->mt_max * sizeof(ds->mt_data[0]));
+		if (ds->mt_data == NULL)
+			goto error;
+	}
+	ds->mt_pos = 0;
+	if (ds->lt_max == 0) {
+		ds->lt_max = 0x1000;
+		ds->lt_data = malloc(ds->lt_max * sizeof(ds->lt_data[0]));
+		if (ds->lt_data == NULL)
+			goto error;
+	}
+	ds->lt_pos = 0;
+	if (ds->ft_max == 0) {
+		ds->ft_max = 0x1000;
+		ds->ft_data = malloc(ds->ft_max * sizeof(ds->ft_data[0]));
+		if (ds->ft_data == NULL)
+			goto error;
+	}
+	ds->ft_pos = 0;
+	if (ds->pt_max == 0) {
+		ds->pt_max = (w_slot << 3) + 256;
+		ds->pt_data = malloc(ds->pt_max * sizeof(ds->pt_data[0]));
+		if (ds->pt_data == NULL)
+			goto error;
 	}
 
 	ds->bw.count = CACHE_BITS;
-	ds->error = ARCHIVE_OK;
 
-	return (ARCHIVE_OK);
+	if (ds->match.buff == NULL) {
+		ds->match.buff_top = malloc(MATCH_MAX);
+		if (ds->match.buff_top == NULL)
+			goto error;
+		ds->match.buff = ds->match.buff_top;
+	}
+	if (ds->match.hash_tbl == NULL) {
+		size = MATCH_HASH_SIZE * sizeof(ds->match.hash_tbl[0]);
+		ds->match.hash_tbl = malloc(size);
+		if (ds->match.hash_tbl == NULL)
+			goto error;
+		memset(ds->match.hash_tbl, 0xff, size);
+	}
+	if (ds->match.link == NULL || w_size != ds->match.w_size) {
+		free(ds->match.link);
+		size = ((ds->match.w_bits * ds->match.w_size) + 7) >> 3;
+		ds->match.link = calloc(size, 1);
+		if (ds->match.link == NULL)
+			goto error;
+	}
+	ds->match.state = MATCH_FIRST_BYTE;
+	ds->match.chunk_remaining_bytes = CHUNK_SIZE;
+	ds->match.w_pos = -1;
+	ds->match.r0 = ds->match.r1 = ds->match.r2 = 1;
+	ds->chunk_bytes_out = CHUNK_SIZE;
+	ds->error = LZX_OK;
+
+	return (LZX_OK);
+error:
+	lzx_encode_free(strm);
+	return (ds->error);
 }
 
 static void
@@ -1232,45 +1909,844 @@ lzx_encode_free(struct lzx_stream *strm)
 {
 	if (strm->ds == NULL)
 		return;
-	free(strm->ds->w_buff);
-	free(strm->ds->pos_tbl);
+	free(strm->ds->base_pos);
+	free(strm->ds->footer_bits);
+	free(strm->ds->huf_tree.heap);
+	free(strm->ds->huf_tree.left);
+	free(strm->ds->huf_tree.right);
+	lzx_free_huf_stat(&(strm->ds->mt));
+	lzx_free_huf_stat(&(strm->ds->lt));
+	lzx_free_huf_stat(&(strm->ds->at));
+	lzx_free_huf_stat(&(strm->ds->pt));
+	free(strm->ds->mt_data);
+	free(strm->ds->lt_data);
+	free(strm->ds->ft_data);
+	free(strm->ds->pt_data);
+	free(strm->ds->match.w_buff);
+	free(strm->ds->match.buff_top);
+	free(strm->ds->match.hash_tbl);
+	free(strm->ds->match.link);
 	free(strm->ds);
 	strm->ds = NULL;
+}
+
+static int
+lzx_ensure_mt_data(struct lzx_enc *ds, int len)
+{
+	void *p;
+
+	if (ds->mt_pos + len <= ds->mt_max)
+		return (0);
+	ds->mt_max += 0x1000;
+	p = realloc(ds->mt_data, ds->mt_max * sizeof(ds->mt_data[0]));
+	if (p == NULL)
+		return (-1);
+	ds->mt_data = p;
+	return (0);
+}
+
+static int
+lzx_ensure_lt_data(struct lzx_enc *ds, int len)
+{
+	void *p;
+
+	if (ds->lt_pos + len <= ds->lt_max)
+		return (0);
+	ds->lt_max += 0x1000;
+	p = realloc(ds->lt_data, ds->lt_max * sizeof(ds->lt_data[0]));
+	if (p == NULL)
+		return (-1);
+	ds->lt_data = p;
+	return (0);
+}
+
+static int
+lzx_ensure_ft_data(struct lzx_enc *ds, int len)
+{
+	void *p;
+
+	if (ds->ft_pos + len <= ds->ft_max)
+		return (0);
+	ds->ft_max += 0x1000;
+	p = realloc(ds->ft_data, ds->ft_max * sizeof(ds->ft_data[0]));
+	if (p == NULL)
+		return (-1);
+	ds->ft_data = p;
+	return (0);
+}
+
+static int
+lzx_encode_match(struct lzx_enc *ds, int c)
+{
+	struct lzx_match *m = &(ds->match);
+
+	if (c < 256) {
+fprintf(stderr, "single c = 0x%X\n", c);
+		ds->block_bytes++;
+		ds->block_singles++;
+	} else {
+		int f_offset, t;
+		int slot;
+		int pos_footer;
+		int len_header, len_footer;
+		int offset_bits;
+
+fprintf(stderr, "offset = %d, len = %d\n", m->pos, m->len);
+		ds->block_bytes += m->len;
+		/*
+		 * Converting match offset into formatted offset value.
+		 */
+		if (m->r0 == m->pos)
+			f_offset = 0;
+		else if (m->r1 == m->pos) {
+			f_offset = 1;
+			t = m->r0;
+			m->r0 = m->r1;
+			m->r1 = t;
+		} else if (m->r2 == m->pos) {
+			f_offset = 2;
+			t = m->r0;
+			m->r0 = m->r2;
+			m->r2 = t;
+		} else {
+			f_offset = m->pos + 2;
+			m->r2 = m->r1;
+			m->r1 = m->r0;
+			m->r0 = m->pos;
+		}
+
+		/*
+		 * Converting formatted offset into positin slot and
+		 * position footer values.
+		 */
+		if (f_offset > 3) {
+			int slot_max = slots[m->w_bits - SLOT_BASE];
+			for (slot = 5; slot < slot_max; slot++) {
+				if (f_offset < ds->base_pos[slot])
+					break;
+			}
+			--slot;
+			pos_footer = f_offset - ds->base_pos[slot];
+		} else {
+			slot = f_offset;
+			pos_footer = 0;
+		}
+
+		/*
+		 * Converting match length into length header and length
+		 * footer values.
+		 */
+		if (m->len <= 8) {
+			len_header = m->len - 2;
+			len_footer = -1;
+		} else {
+			len_header = 7;
+			len_footer = m->len - 9;
+			if (len_footer > 248)
+				len_footer = 248;
+		}
+
+		/*
+		 * Converting length header and position slot into
+		 * length/position header value.
+		 */
+		c = (slot << 3) + len_header + 256;
+
+		if ((offset_bits = ds->footer_bits[slot]) > 0) {
+			ds->verbatim_bits += offset_bits;
+			if (offset_bits >= 3) {
+				ds->at.freq[pos_footer&0x7]++;
+				ds->aligned_offset_bits += offset_bits - 3;
+			} else
+				ds->aligned_offset_bits += offset_bits;
+
+			if (lzx_ensure_ft_data(ds, 2) < 0)
+				return (LZX_ERR_MEM);
+			ds->ft_data[ds->ft_pos++] = (uint16_t)pos_footer;
+		}
+
+		if (len_footer >= 0) {
+			if (lzx_ensure_lt_data(ds, 1) < 0)
+				return (LZX_ERR_MEM);
+			ds->lt.freq[len_footer]++;
+			ds->lt_data[ds->lt_pos++] = len_footer;
+		}
+	}
+	if (lzx_ensure_mt_data(ds, 1) < 0)
+		return (LZX_ERR_MEM);
+	ds->mt_data[ds->mt_pos++] = c;
+	ds->mt.freq[c]++;
+
+	return (LZX_OK);
+}
+
+static int
+lzx_make_pre_tree(struct lzx_enc *ds, struct lzx_huf_stat *hs,
+    int start, int end)
+{
+	uint16_t *freq;
+	uint8_t *blen, *prev_blen;
+	uint8_t *pt_data;
+	int pt_pos = 0;
+	int i;
+
+	if (lzx_init_huf_stat(&ds->pt, 20) < 0)
+		return (-1);
+	if (end < 0 || end > hs->size)
+		end = hs->size;
+	blen = hs->blen;
+	prev_blen = hs->prev_blen;
+	pt_data = ds->pt_data;
+	freq = ds->pt.freq;
+	for (i = start; i < end;) {
+		int c, j;
+
+		/* Find continuous zeroes. */
+		for (j = i; j < end; j++) {
+			if (blen[j])
+				break;
+		}
+		if (j - i >= 20) {
+			freq[18]++;
+			pt_data[pt_pos++] = 18;
+			c = j - i - 20;
+			if (c > 0x1f)
+				c = 0x1f;
+			pt_data[pt_pos++] = c;
+			i += c + 20;
+			continue;
+		}
+		if (j - i >= 4) {
+			freq[17]++;
+			pt_data[pt_pos++] = 17;
+			c = j - i - 4;
+			if (c > 0x0f)
+				c = 0x0f;
+			pt_data[pt_pos++] = c;
+			i += c + 4;
+			continue;
+		}
+
+		/* Find the same continuous values. */
+		c = blen[i];
+		for (j = i+1; j < end; j++) {
+			if (blen[j] != c)
+				break;
+		}
+		c = j - i;
+		if (c == 4 || c == 5) {
+			freq[19]++;
+			pt_data[pt_pos++] = 19;
+			pt_data[pt_pos++] = c & 1;
+			if (blen[i] > prev_blen[i])
+				c = 17 - (blen[i] - prev_blen[i]);
+			else
+				c = prev_blen[i] - blen[i];
+			freq[c]++;
+			pt_data[pt_pos++] = c;
+			i += j - i;
+			continue;
+		}
+
+		if (blen[i] > prev_blen[i])
+			c = 17 - (blen[i] - prev_blen[i]);
+		else
+			c = prev_blen[i] - blen[i];
+		freq[c]++;
+		pt_data[pt_pos++] = c;
+		i++;
+	}
+	ds->pt_pos = pt_pos;
+
+	lzx_make_tree(ds, &(ds->pt));
+	return (0);
+}
+
+static int
+lzx_output_pre_tree(struct lzx_stream *strm, struct lzx_enc *ds)
+{
+	uint8_t *blen;
+	int i;
+
+	blen = ds->pt.blen;
+	for (i = ds->loop; i < ds->pt.size; i++) {
+		if (lzx_bw_putbits(strm, 4, blen[i]) == 0) {
+			ds->loop = i + 1;
+			return (0);
+		}
+	}
+	ds->loop = i;
+	return (1);
+}
+
+static int
+lzx_output_path_lengths(struct lzx_stream *strm, struct lzx_enc *ds)
+{
+	uint8_t *pt_data;
+	uint8_t *blen;
+	uint16_t *code;
+	int i;
+
+	pt_data = ds->pt_data;
+	blen = ds->pt.blen;
+	code = ds->pt.code;
+	for (i = ds->loop; i < ds->pt_pos;) {
+		int c, s, w; 
+
+		c = pt_data[i++];
+		s = blen[c];
+		w = code[c];
+		switch (c) {
+		case 17:
+			c = pt_data[i++];
+			s += 4;
+			w = (w << 4) + c;
+			break;
+		case 18:
+			c = pt_data[i++];
+			s += 5;
+			w = (w << 5) + c;
+			break;
+		case 19:
+			c = pt_data[i++];
+			s += 1;
+			w = (w << 1) + c;
+			c = pt_data[i++];
+			s += blen[c];
+			w = (w << blen[c]) + code[c];
+			break;
+		}
+		if (lzx_bw_putbits(strm, s, w) == 0) {
+			ds->loop = i;
+			return (0);
+		}
+	}
+	return (1);
+}
+
+static void
+lzx_reset_block(struct lzx_enc *ds)
+{
+	ds->block_state = 0;
+	ds->output_block = NULL;
+	ds->state = LZX_ST_MATCHING;
+	ds->mt_pos = 0;
+	lzx_reset_huf_stat(&(ds->mt));
+	ds->lt_pos = 0;
+	lzx_reset_huf_stat(&(ds->lt));
+	lzx_reset_huf_stat(&(ds->at));
+	ds->ft_pos = 0;
+	ds->block_bytes = 0;
+	ds->block_singles = 0;
+	ds->verbatim_bits = 0;
+	ds->aligned_offset_bits = 0;
+}
+
+static int
+lzx_output_uncompressed_block(struct lzx_stream *strm)
+{
+	struct lzx_enc *ds = strm->ds;
+	uint8_t *outp, *endp, *w_buff;
+	int r, r_pos, w_mask;
+
+	switch (ds->block_state) {
+	case 0:
+		/*
+		 * Make an uncompressed block.
+		 */
+		/* Translation = OFF */
+		if (!lzx_bw_putbits(strm, 1, 0)) {
+			ds->block_state = 1;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 1:
+		/* Output Block Type. */
+		if (!lzx_bw_putbits(strm, 3, UNCOMPRESSED_BLOCK)) {
+			ds->block_state = 2;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 2:
+		/* Output Block Size. */
+		if (!lzx_bw_putbits(strm, 24, (unsigned)ds->block_bytes)) {
+			ds->block_state = 3;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 3:
+		/* Align the bit stream by 16 bits. */
+		if ((ds->bw.count & 0xF) == 0)
+			r = lzx_bw_putbits(strm, 16, 0);
+		else
+			r = lzx_bw_putbits(strm, ds->bw.count & 0xF, 0);
+		if (!r) {
+			ds->block_state = 4;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 4:
+		if (!lzx_bw_putbits(strm, 32, (unsigned)ds->match.r0)) {
+			ds->block_state = 5;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 5:
+		if (!lzx_bw_putbits(strm, 32, (unsigned)ds->match.r1)) {
+			ds->block_state = 6;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 6:
+		if (!lzx_bw_putbits(strm, 32, (unsigned)ds->match.r2)) {
+			ds->block_state = 7;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 7:
+		if (!lzx_bw_flush(strm)) {
+			ds->block_state = 8;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 8:
+		ds->block_remaining_bytes = ds->block_bytes;
+		/* FALL THROUGH */
+	case 9:
+		outp = strm->next_out;
+		if (strm->avail_out > ds->chunk_bytes_out)
+			endp = outp + ds->chunk_bytes_out;
+		else
+			endp = outp + strm->avail_out;
+		if (endp - outp > ds->block_remaining_bytes)
+			endp = outp + ds->block_remaining_bytes;
+		w_mask = ds->match.w_mask;
+		w_buff = ds->match.w_buff;
+		r_pos = (ds->match.w_pos -
+			     ds->block_remaining_bytes + 1) & w_mask;
+		if (endp - outp > ds->match.w_size - r_pos) {
+			int l = ds->match.w_size - r_pos;
+			memcpy(outp, w_buff+r_pos, l);
+			outp += l;
+			r_pos = (r_pos + l) & w_mask;
+		}
+		if (outp < endp) {
+			memcpy(outp, w_buff+r_pos, endp - outp);
+			outp = endp;
+		}
+		ds->block_remaining_bytes -= outp - strm->next_out;
+		strm->avail_out -= outp - strm->next_out;
+		strm->total_out += outp - strm->next_out;
+		ds->chunk_bytes_out -= outp - strm->next_out;
+		strm->next_out = outp;
+		if (ds->chunk_bytes_out == 0) {
+			ds->chunk_bytes_out = CHUNK_SIZE;
+			if (ds->block_remaining_bytes == 0)
+				ds->block_state = 10;
+			else
+				ds->block_state = 9;
+			return (LZX_EOC);
+		}
+		if (strm->avail_out == 0) {
+			if (ds->block_remaining_bytes == 0)
+				ds->block_state = 10;
+			else
+				ds->block_state = 9;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 10:
+		if (ds->block_bytes & 1) {
+			if (strm->avail_out <= 0) {
+				ds->block_state = 10;
+				return (LZX_OK);
+			}
+			*strm->next_out++ = 0;
+			strm->avail_out--;
+			strm->total_out++;
+		}
+		break;
+	}
+	lzx_reset_block(ds);
+	if (ds->chunk_bytes_out == 0) {
+		ds->chunk_bytes_out = CHUNK_SIZE;
+		return (LZX_EOC);
+	}
+	return (LZX_OK);
+}
+
+static int
+lzx_output_verbatim_block(struct lzx_stream *strm)
+{
+	struct lzx_enc *ds = strm->ds;
+	int i, aligned, blocktype;
+
+	switch (ds->block_state) {
+	case 0:
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 1:
+		if (ds->make_aligned_offset_block) {
+			for (i = ds->loop; i < 8; i++) {
+				if (!lzx_bw_putbits(strm, 3, ds->at.blen[i])) {
+					ds->loop = i + 1;
+					ds->block_state = 1;
+					return (LZX_OK);
+				}
+			}
+		}
+		/* FALL THROUGH */
+	case 2:
+		if (lzx_make_pre_tree(ds, &(ds->mt), 0, 256) < 0)
+			return (LZX_ERR_MEM);
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 3:
+		if (!lzx_output_pre_tree(strm, ds)) {
+			ds->block_state = 3;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 4:
+		if (!lzx_output_path_lengths(strm, ds)) {
+			ds->block_state = 4;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 5:
+		if (lzx_make_pre_tree(ds, &(ds->mt), 256, -1) < 0)
+			return (LZX_ERR_MEM);
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 6:
+		if (!lzx_output_pre_tree(strm, ds)) {
+			ds->block_state = 6;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 7:
+		if (!lzx_output_path_lengths(strm, ds)) {
+			ds->block_state = 7;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 8:
+		if (lzx_make_pre_tree(ds, &(ds->lt), 0, -1) < 0)
+			return (LZX_ERR_MEM);
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 9:
+		if (!lzx_output_pre_tree(strm, ds)) {
+			ds->block_state = 9;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 10:
+		if (!lzx_output_path_lengths(strm, ds)) {
+			ds->block_state = 10;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 11:
+		/* Output Translation = OFF, Block Type. */
+		if (ds->make_aligned_offset_block)
+			blocktype = ALIGNED_OFFSET_BLOCK;
+		else
+			blocktype = VERBATIM_BLOCK;
+		if (!lzx_bw_putbits(strm, 4, blocktype)) {
+			ds->block_state = 12;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 12:
+		/* Output Block Size. */
+		if (!lzx_bw_putbits(strm, 24, (unsigned)ds->block_bytes)) {
+			ds->block_state = 13;
+			return (LZX_OK);
+		}
+		/* FALL THROUGH */
+	case 13:
+		ds->mt_rp = 0;
+		ds->lt_rp = 0;
+		ds->ft_rp = 0;
+		/* FALL THROUGH */
+	case 14:
+		aligned = ds->make_aligned_offset_block;
+		while (ds->mt_rp < ds->mt_pos) {
+			int c, b, d;
+
+			/* Output Main Tree element. */
+			c = ds->mt_data[ds->mt_rp++];
+			b = ds->mt.blen[c];
+			d = ds->mt.code[c];
+			if (c < 256) {
+				ds->chunk_bytes_out--;
+			} else {
+				int bits;
+
+				c -= 256;
+				if ((c & 7) == 7) {
+					int lf;
+
+					/* Output Length Tree element. */
+					lf = ds->lt_data[ds->lt_rp++];
+					bits = ds->lt.blen[lf];
+					b += bits;
+					d = (d << bits) + ds->lt.code[lf];
+					ds->chunk_bytes_out -= lf + 9;
+				} else
+					ds->chunk_bytes_out -= (c & 7) + 2;
+
+				bits = ds->footer_bits[c >> 3];
+				if (bits > 0) {
+					int pf;
+
+					pf = ds->ft_data[ds->ft_rp++];
+					if (bits > 16)
+						pf |= 0x10000;
+					if (aligned && bits >= 3) {
+						/* Output Verbatim bits. */
+						b += bits - 3;
+						d = (d << (bits-3)) + (pf>>3);
+						/* Output Aligned offset. */
+						pf &= 7;
+						bits = ds->at.blen[pf];
+						b += bits;
+						d = (d << bits) +
+							ds->at.code[pf];
+					} else {
+						/* Output Verbatim bits. */
+						b += bits;
+						d = (d << bits) + pf;
+					}
+				}
+			}
+			if (!lzx_bw_putbits(strm, b, d)) {
+				ds->block_state = 14;
+				return (LZX_OK);
+			}
+			if (ds->chunk_bytes_out == 0) {
+				ds->block_state = 14;
+				ds->chunk_bytes_out = CHUNK_SIZE;
+				return (LZX_EOC);
+			}
+		}
+		break;
+	}
+	lzx_reset_block(ds);
+	if (ds->chunk_bytes_out == 0) {
+		ds->chunk_bytes_out = CHUNK_SIZE;
+		return (LZX_EOC);
+	}
+	return (LZX_OK);
 }
 
 static int
 lzx_encode(struct lzx_stream *strm, int last)
 {
 	struct lzx_enc *ds = strm->ds;
-	int len;
+	int64_t avail_in, total_bits;
+	int64_t v_bits, a_bits;
+	int c, r;
 
-	(void)last;
 	if (ds->error)
 		return (ds->error);
 
-	lzx_bw_putbits(strm, 1, 0);/* Translation = OFF */
-	lzx_bw_putbits(strm, 3, UNCOMPRESSED_BLOCK);/* Block Type. */
-	lzx_bw_putbits(strm, 24, (unsigned)strm->avail_in);/* Size. */
-	/* Align the bit stream by 16 bits. */
-	if ((ds->bw.count & 0xF) == 0)
-		lzx_bw_putbits(strm, 16, 0);
-	else
-		lzx_bw_putbits(strm, ds->bw.count & 0xF, 0);
-	lzx_bw_putbits(strm, 32, 0);/* R0 */
-	lzx_bw_putbits(strm, 32, 0);/* R1 */
-	lzx_bw_putbits(strm, 32, 0);/* R2 */
-	lzx_bw_flush(strm);
-	len = (size_t)strm->avail_in;
-	memcpy(strm->next_out, strm->next_in, len);
-	strm->next_in += len;
-	strm->avail_in -= len;
-	strm->total_in += len;
-	if (len & 1)
-		strm->next_out[len++] = 0;
-	strm->next_out += len;
-	strm->avail_out -= len;
-	strm->total_out += len;
+	if (lzx_bw_fixup(strm) == 0)
+		return (LZX_OK);
 
-	return (ARCHIVE_EOF);
+	if (ds->output_block != NULL) {
+		r = ds->output_block(strm);
+		if (r != LZX_OK)
+			return (r);
+		if (ds->state == LZX_ST_PUT_BLOCK)
+			return (LZX_OK);
+	}
+
+	avail_in = strm->avail_in;
+	while ((c = lzx_find_best_match(strm, last)) >= 0) {
+		r = lzx_encode_match(ds, c);
+		if (r != LZX_OK)
+			return (r);
+		if (ds->match.chunk_remaining_bytes == 0 &&
+		    ds->mt_pos > 0x2000)
+			break;
+	}
+	strm->total_in += avail_in - strm->avail_in;
+	if (ds->match.chunk_remaining_bytes == 0)
+		ds->match.chunk_remaining_bytes = CHUNK_SIZE;
+	if (c == -1)
+		return (LZX_OK);
+
+	lzx_make_tree(ds, &(ds->mt));
+	lzx_make_tree(ds, &(ds->lt));
+	lzx_make_tree(ds, &(ds->at));
+
+	ds->state = LZX_ST_PUT_BLOCK;
+	total_bits = ds->mt.total_bits + ds->lt.total_bits;
+	v_bits = ds->verbatim_bits;
+	a_bits = 24 + ds->aligned_offset_bits + ds->at.total_bits;
+	if (v_bits > a_bits) {
+		ds->make_aligned_offset_block = 1;
+		total_bits += a_bits;
+	} else {
+		ds->make_aligned_offset_block = 0;
+		total_bits += v_bits;
+	}
+	total_bits += 80 * 3;
+	
+	if ((total_bits >> 3) > ds->block_bytes)
+		ds->output_block = lzx_output_uncompressed_block;
+	else
+		ds->output_block = lzx_output_verbatim_block;
+
+	r = ds->output_block(strm);
+	if (r != LZX_OK)
+		return (r);
+	if (ds->state == LZX_ST_PUT_BLOCK || c >= 0)
+		return (LZX_OK);
+	return (LZX_END);
+}
+
+static void
+lzx_count_len(uint16_t i, int depth, uint16_t size, struct lzx_huf_tree *tp)
+{
+	if (i < size)
+		tp->len_cnt[(depth < 16) ? depth : 16]++;
+	else {
+		lzx_count_len(tp->left [i], depth+1, size, tp);
+		lzx_count_len(tp->right[i], depth+1, size, tp);
+	}
+}
+
+static void
+lzx_make_bitlen(uint16_t root, struct lzx_huf_tree *tp, struct lzx_huf_stat *hs)
+{
+	int i, k;
+	unsigned cum;
+	uint8_t *blen = hs->blen;
+	uint16_t *len_cnt = tp->len_cnt;
+	uint16_t *sortptr = hs->code;
+
+	memset(len_cnt, 0, sizeof(tp->len_cnt));
+	lzx_count_len(root, 0, (uint16_t)hs->size, tp);
+	cum = 0;
+	for (i = 16; i > 0; i--)
+		cum += len_cnt[i] << (16 - i);
+	while (cum != (1U << 16)) {
+		len_cnt[16]--;
+		for (i = 15; i > 0; i--) {
+			if (len_cnt[i] != 0) {
+				len_cnt[i]--;
+				len_cnt[i+1] += 2;
+				break;
+			}
+		}
+		cum--;
+	}
+	for (i = 16; i > 0; i--) {
+		k = len_cnt[i];
+		while (--k >= 0)
+			blen[*sortptr++] = i;
+	}
+}
+
+/* priority queue; send i-th entry down heap */
+static void
+lzx_downheap(struct lzx_huf_tree *tp, struct lzx_huf_stat *hs, int i,
+    int heapsize)
+{
+	uint16_t *freq = hs->freq;
+	int16_t *heap = tp->heap;
+	int j, k;
+
+	k = heap[i];
+	while ((j = 2 * i) <= heapsize) {
+		if (j < heapsize && freq[heap[j]] > freq[heap[j + 1]])
+		 	j++;
+		if (freq[k] <= freq[heap[j]])
+			break;
+		heap[i] = heap[j];
+		i = j;
+	}
+	heap[i] = k;
+}
+
+static void
+lzx_make_code(struct lzx_huf_tree *tp, struct lzx_huf_stat *hs)
+{
+	uint16_t start[18];
+	uint16_t *len_cnt = tp->len_cnt;
+	uint16_t *code = hs->code;
+	uint8_t *blen = hs->blen;
+	int i, n = hs->size;
+
+	start[1] = 0;
+	for (i = 1; i <= 16; i++)
+		start[i + 1] = (start[i] + len_cnt[i]) << 1;
+	for (i = 0; i < n; i++)
+		code[i] = start[blen[i]]++;
+}
+
+static int
+lzx_make_tree(struct lzx_enc *ds, struct lzx_huf_stat *hs)
+{
+	struct lzx_huf_tree *tp = &(ds->huf_tree);
+	uint16_t *freq = hs->freq;
+	uint16_t *code = hs->code;
+	uint16_t *sortptr = hs->code;
+	uint8_t *blen = hs->blen;
+	int16_t *heap;
+	int i, j, k, nn, avail;
+	int heapsize, total_bits;
+
+	heap = tp->heap;
+	avail = nn = hs->size;
+	heapsize = 0;
+	heap[1] = 0;
+
+	for (i = 0; i < nn; i++) {
+		if (freq[i])
+			heap[++heapsize] = i;
+	}
+	if (heapsize < 2) {
+		code[heap[1]] = 0;
+		blen[heap[1]] = heapsize;
+		hs->total_bits = heapsize * freq[heap[1]];
+		return (heap[1]);
+	}
+
+	/* make priority queue */
+	for (i = heapsize >> 1; i >= 1; i--)
+		lzx_downheap(tp, hs, i, heapsize);
+	do {  /* while queue has at least two entries */
+		i = heap[1];  /* take out least-freq entry */
+		if (i < nn)
+			*sortptr++ = i;
+		heap[1] = heap[heapsize--];
+		lzx_downheap(tp, hs, 1, heapsize);
+		j = heap[1];  /* next least-freq entry */
+		if (j < nn)
+			*sortptr++ = j;
+		k = avail++;  /* generate new node */
+		freq[k] = freq[i] + freq[j];
+		heap[1] = k;
+		lzx_downheap(tp, hs, 1, heapsize);  /* put into queue */
+		tp->left[k] = i;
+		tp->right[k] = j;
+	} while (heapsize > 1);
+	lzx_make_bitlen(k, tp, hs);
+	lzx_make_code(tp, hs);
+
+	total_bits = 0;
+	for (i = 0; i < nn; i++) {
+		if (freq[i])
+			total_bits += blen[i] * freq[i];
+	}
+	hs->total_bits = total_bits;
+	return (k);  /* return root */
 }
 

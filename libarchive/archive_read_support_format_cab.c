@@ -1670,6 +1670,7 @@ cab_read_ahead_cfdata_lzx(struct archive_read *a, ssize_t *avail)
 		cab->entry_cffolder->decompress_init = 1;
 	}
 
+fprintf(stderr, "CFDATA[%d]\n", cab->entry_cffolder->cfdata_index-1);
 	/* Clean up remaining bits of previous CFDATA. */
 	lzx_cleanup_bitstream(&cab->xstrm);
 	cab->xstrm.total_out = uavail;
@@ -2408,6 +2409,7 @@ lzx_decode(struct lzx_stream *strm, int last)
 			bytes_written -= strm->avail_out;
 			strm->next_out += bytes_written;
 			strm->total_out += bytes_written;
+fprintf(stderr, "total_out = %d\n", (int)strm->total_out);
 		}
 	} while (r == 100);
 	strm->total_in += avail_in - strm->avail_in;
@@ -2945,6 +2947,7 @@ lzx_decode_blocks(struct lzx_stream *strm, int last)
 			 * Compute a real position in window.
 			 */
 			copy_pos = (w_pos - copy_pos) & w_mask;
+fprintf(stderr, "pos=%d, len=%d, wpos=%d\n", copy_pos, copy_len, w_pos);
 			/* FALL THROUGH */
 		case ST_COPY:
 			/*
