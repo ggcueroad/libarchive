@@ -414,17 +414,27 @@ write_cfdata(struct archive_write *a, struct cffolder *cffolder,
 	archive_le32enc(p, sum);
 
 	cffolder->cfdata_count++;
-	cffolder->remaining = 0x8000;
 	return (write_to_temp(a, p, 8 + compsize));
 }
 
 #ifdef HAVE_ZLIB_H
 static int
-cfdata_compress_mszip(struct archive_write *a)
+cfdata_compress_mszip(struct archive_write *a, int last)
 {
 	struct cab *cab = (struct cab *)a->format_data;
 	struct cffolder *cffolder = &(cab->cffolder);
 	int r;
+
+	if (!cab->zstrm_valid) {
+		if (deflateInit2(&(cab->zstrm),
+		    cab->opt_compression_level, Z_DEFLATED,
+		    -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Internal error initializing compression library");
+			return (ARCHIVE_FATAL);
+		}
+		cab->zstrm_valid = 1;
+	}
 
 	cab->zstrm.next_in = cffolder->uncompressed;
 	cab->zstrm.avail_in = 0x8000 - cffolder->remaining;
@@ -444,19 +454,23 @@ cfdata_compress_mszip(struct archive_write *a)
 		return (ARCHIVE_FATAL);
 	}
 
-	deflateReset(&(cab->zstrm));
-	if (deflateSetDictionary(&(cab->zstrm),
-	    cffolder->uncompressed, 0x8000) != Z_OK) {
-		archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-		    "Internal error initializing compression library");
-		return (ARCHIVE_FATAL);
+	if (!last) {
+		deflateReset(&(cab->zstrm));
+		if (deflateSetDictionary(&(cab->zstrm),
+		    cffolder->uncompressed, 0x8000) != Z_OK) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Internal error initializing compression library");
+			return (ARCHIVE_FATAL);
+		}
 	}
+
 	r = write_cfdata(a, cffolder, (size_t)cab->zstrm.total_out,
 		(size_t)cab->zstrm.total_in);
 	if (r != ARCHIVE_OK)
 		return (ARCHIVE_FATAL);
 	cab->total_bytes_compressed += cab->zstrm.total_out;
 	cab->total_bytes_uncompressed += cab->zstrm.total_in;
+	cffolder->remaining = 0x8000;
 	return (ARCHIVE_OK);
 }
 #endif
@@ -469,16 +483,29 @@ cfdata_compress_lzx(struct archive_write *a, int last)
 	size_t usize = 0x8000, last_size;
 	int r;
 
+	if (!cab->lzxstrm_valid) {
+		cffolder->compdata = 21;
+		if (lzx_encode_init(&(cab->lzxstrm),
+		    cffolder->compdata) != ARCHIVE_OK) {
+			archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+			    "Internal error initializing LZX compression");
+			return (ARCHIVE_FATAL);
+		}
+		cab->lzxstrm_valid = 1;
+		cab->lzxstrm.next_out = cffolder->cfdata + 8;
+		cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
+		cab->lzxstrm.total_out = 0;
+	}
+
 	cab->lzxstrm.next_in = cffolder->uncompressed;
 	cab->lzxstrm.avail_in = 0x8000 - cffolder->remaining;
 	cab->lzxstrm.total_in = 0;
-	cab->lzxstrm.next_out = cffolder->cfdata + 8;
-	cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
-	cab->lzxstrm.total_out = 0;
+
 	if (!cab->lzxstrm.avail_in)
 		last_size = 0x8000;
 	else
 		last_size = (size_t)cab->lzxstrm.avail_in;
+
 	for (;;) {
 		switch (r = lzx_encode(&(cab->lzxstrm), last)) {
 		default:
@@ -488,6 +515,7 @@ cfdata_compress_lzx(struct archive_write *a, int last)
 		case LZX_OK: case LZX_END: case LZX_EOC:
 			cab->total_bytes_compressed += cab->lzxstrm.total_out;
 			cab->total_bytes_uncompressed += cab->lzxstrm.total_in;
+			cffolder->remaining = 0x8000;
 			break;
 		}
 		if (r == LZX_OK)
@@ -502,7 +530,6 @@ cfdata_compress_lzx(struct archive_write *a, int last)
 		cab->lzxstrm.next_out = cffolder->cfdata + 8;
 		cab->lzxstrm.avail_out = cffolder->cfdata_allocated_size - 8;
 		cab->lzxstrm.total_in = 0;
-		cab->lzxstrm.total_out = 0;
 	}
 }
 
@@ -522,10 +549,11 @@ cfdata_out(struct archive_write *a, int last)
 			return (ARCHIVE_FATAL);
 		cab->total_bytes_compressed += uncompsize;
 		cab->total_bytes_uncompressed += uncompsize;
+		cffolder->remaining = 0x8000;
 		break;
 #ifdef HAVE_ZLIB_H
 	case COMPTYPE_MSZIP:
-		r = cfdata_compress_mszip(a);
+		r = cfdata_compress_mszip(a, last);
 		if (r < 0)
 			return (r);
 		break;
@@ -549,7 +577,7 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 	size_t l, ss;
 	int r;
 
-	if (cffolder->cfdata == NULL && s) {
+	if (cffolder->cfdata == NULL) {
 		cffolder->remaining = 0x8000;
 		cffolder->comptype = cab->opt_compression;
 		cffolder->cfdata_allocated_size = 8 + 0x8000 + 6144;
@@ -559,52 +587,24 @@ compress_out(struct archive_write *a, const void *buff, size_t s)
 			    "Can't allocate memory");
 			return (ARCHIVE_FATAL);
 		}
-		if (cab->opt_compression != COMPTYPE_NONE) {
-			cffolder->uncompressed = malloc(0x8000);
-			if (cffolder->uncompressed == NULL) {
+	}
+
+	switch (cab->opt_compression) {
+	case COMPTYPE_NONE:
+		dist = cffolder->cfdata + 8;
+		break;
+#ifdef HAVE_ZLIB_H
+	case COMPTYPE_MSZIP:
+#endif
+	case COMPTYPE_LZX:
+		if ((dist = cffolder->uncompressed) == NULL) {
+			if ((dist = malloc(0x8000)) == NULL) {
 				archive_set_error(&a->archive, ENOMEM,
 				    "Can't allocate memory");
 				return (ARCHIVE_FATAL);
 			}
+			cffolder->uncompressed = dist;
 		}
-	}
-
-	switch (cab->opt_compression) {
-	case COMPTYPE_LZX:
-		if (!cab->lzxstrm_valid && s) {
-			cffolder->compdata = 21;
-			if (lzx_encode_init(&(cab->lzxstrm),
-			    cffolder->compdata) != ARCHIVE_OK) {
-				archive_set_error(&a->archive,
-				    ARCHIVE_ERRNO_MISC,
-				    "Internal error initializing "
-				    "LZX compression");
-				return (ARCHIVE_FATAL);
-			}
-			cab->lzxstrm_valid = 1;
-		}
-		dist = cffolder->uncompressed;
-		break;
-#ifdef HAVE_ZLIB_H
-	case COMPTYPE_MSZIP:
-		if (!cab->zstrm_valid && s) {
-			if (deflateInit2(&(cab->zstrm),
-			    cab->opt_compression_level, Z_DEFLATED,
-			    -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
-				archive_set_error(&a->archive,
-				    ARCHIVE_ERRNO_MISC,
-				    "Internal error initializing "
-				    "compression library");
-				return (ARCHIVE_FATAL);
-			}
-			cab->zstrm_valid = 1;
-		}
-		dist = cffolder->uncompressed;
-		break;
-#endif
-	case COMPTYPE_NONE:
-	default:
-		dist = cffolder->cfdata + 8;
 		break;
 	}
 	ss = s;
@@ -1076,10 +1076,11 @@ struct lzx_enc {
 	struct bit_writer {
 		uint64_t	 buff;
 		int		 count;
-		int		 have_odd:5;
-		int		 have_order:1;
-		unsigned	 order_bits;
 		int		 order_n;
+		unsigned	 order_bits;
+		uint8_t		 wait_buff[8];
+		int		 wait_pos;
+		int		 wait_bytes;
 	}			 bw;
 
 	/*
@@ -1096,6 +1097,13 @@ struct lzx_enc {
 		uint8_t		*prev_blen;
 		uint16_t	*code;
 	}			 mt,lt,at, pt;
+
+	struct lzx_huf_pre_tree {
+		struct lzx_huf_stat pt;
+		uint8_t		*pt_data;
+		int		 pt_pos;
+		int		 pt_max;
+	}			 pre_mt256, pre_mtRemain, pre_lt;
 
 	struct lzx_huf_tree {
 		int16_t		*heap;
@@ -1116,11 +1124,8 @@ struct lzx_enc {
 	int			 ft_pos;
 	int			 ft_max;
 	int			 ft_rp;
-	uint8_t			*pt_data;
-	int			 pt_pos;
-	int			 pt_max;
 	int			 loop;
-	int			 verbatim_bits;
+	int			 verbatim_offset_bits;
 	int			 aligned_offset_bits;
 
 	struct lzx_match {
@@ -1162,6 +1167,7 @@ struct lzx_enc {
 	int			 block_remaining_bytes;
 	int			 block_singles;
 	int			 chunk_bytes_out;
+	int			 should_return_eoc;
 	int			(*output_block)(struct lzx_stream *);
 	int			 make_aligned_offset_block;
 
@@ -1171,7 +1177,7 @@ struct lzx_enc {
 static void	lzx_bw_save_order(struct lzx_enc *, int, unsigned);
 static int	lzx_bw_fill(struct lzx_stream *);
 static int	lzx_bw_fixup(struct lzx_stream *);
-static int	lzx_bw_flush(struct lzx_stream *);
+static int	lzx_bw_flush(struct lzx_stream *, int);
 static int	lzx_bw_putbits(struct lzx_stream *, int, unsigned);
 static int	lzx_find_best_match(struct lzx_stream *, int);
 static void	lzx_find_match_length(struct lzx_match *, int);
@@ -1563,35 +1569,35 @@ lzx_find_best_match(struct lzx_stream *strm, int last)
 static void
 lzx_bw_save_order(struct lzx_enc *ds, int n, unsigned bits)
 {
-	ds->bw.have_order = 1;
-	ds->bw.order_bits = bits;
 	ds->bw.order_n = n;
+	ds->bw.order_bits = bits;
+}
+
+static void
+lzx_bw_setup_wait_buff(struct lzx_enc *ds)
+{
+	ds->bw.wait_buff[0] = (uint8_t)(ds->bw.buff >> 48);
+	ds->bw.wait_buff[1] = (uint8_t)(ds->bw.buff >> 56);
+	ds->bw.wait_buff[2] = (uint8_t)(ds->bw.buff >> 32);
+	ds->bw.wait_buff[3] = (uint8_t)(ds->bw.buff >> 40);
+	ds->bw.wait_buff[4] = (uint8_t)(ds->bw.buff >> 16);
+	ds->bw.wait_buff[5] = (uint8_t)(ds->bw.buff >> 24);
+	ds->bw.wait_buff[6] = (uint8_t)(ds->bw.buff & 0xFF);
+	ds->bw.wait_buff[7] = (uint8_t)(ds->bw.buff >> 8);
+	ds->bw.wait_pos = 0;
 }
 
 static int
-lzx_bw_fill(struct lzx_stream *strm)
+lzx_bw_out_waiting_bytes(struct lzx_stream *strm)
 {
 	struct lzx_enc *ds = strm->ds;
-	int i = 8 - ds->bw.have_odd;
 
-	while (strm->avail_out > 1 && ds->bw.have_odd) {
-		strm->next_out[0] = (uint8_t)(ds->bw.buff >> (48 - (i * 8)));
-		strm->next_out[1] = (uint8_t)(ds->bw.buff >> (56 - (i * 8)));
-		strm->next_out += 2;
-		strm->avail_out -= 2;
-		strm->total_out += 2;
-		ds->bw.have_odd -= 2;
-		i += 2;
+	while (strm->avail_out > 0 && ds->bw.wait_pos < ds->bw.wait_bytes) {
+		*strm->next_out++ = ds->bw.wait_buff[ds->bw.wait_pos++];
+		--strm->avail_out;
+		++strm->total_out;
 	}
-	if (strm->avail_out && ds->bw.have_odd) {
-		*strm->next_out++ = (uint8_t)(ds->bw.buff >> (48 - (i * 8)));
-		strm->avail_out--;
-		strm->total_out++;
-		ds->bw.have_odd--;
-	}
-	if (ds->bw.have_odd == 0)
-		ds->bw.buff = 0;
-	return (strm->avail_out > 0);
+	return (ds->bw.wait_pos == ds->bw.wait_bytes);
 }
 
 static int
@@ -1599,52 +1605,41 @@ lzx_bw_fixup(struct lzx_stream *strm)
 {
 	struct lzx_enc *ds = strm->ds;
 
-	if (ds->bw.have_odd) {
-		if (strm->avail_out == 0)
-			return (0);
-		if (ds->bw.have_odd & 1) {
-			int i = 8 - ds->bw.have_odd;
-			*strm->next_out++ = (uint8_t)
-				(ds->bw.buff >> (64 - (i * 8)));
-			strm->avail_out--;
-			strm->total_out++;
-			ds->bw.have_odd--;
-			if (ds->bw.have_odd == 0)
-				ds->bw.buff = 0;
-			if (strm->avail_out == 0)
-				return (0);
-		}
-		if (ds->bw.have_odd) {
-			if (lzx_bw_fill(strm) == 0)
-				return (0);
-		}
-	}
-	if (ds->bw.have_order) {
+	if (!lzx_bw_out_waiting_bytes(strm))
+		return (0);
+	if (ds->bw.order_n) {
 		int n = ds->bw.order_n;
-		unsigned bits = ds->bw.order_bits;
 
-		if (strm->avail_out == 0)
-			return (0);
 		ds->bw.order_n = 0;
-		ds->bw.have_order = 0;
-		if (lzx_bw_putbits(strm, n, bits) == 0)
-			return (0);
+		lzx_bw_putbits(strm, n, ds->bw.order_bits);
 	}
 	return (1);
 }
 
 static int
-lzx_bw_flush(struct lzx_stream *strm)
+lzx_bw_flush(struct lzx_stream *strm, int full)
 {
 	struct lzx_enc *ds = strm->ds;
+	int n = CACHE_BITS - ds->bw.count;
 
-	if (ds->bw.count == CACHE_BITS)
+	if (n == 0)
 		return (1);
-	ds->bw.have_odd = (CACHE_BITS - ds->bw.count + 7) >> 3;
-	if (ds->bw.have_odd & 1)
-		ds->bw.have_odd++;
-	ds->bw.buff >>= (8 - ds->bw.have_odd) * 8;
-	return (lzx_bw_fill(strm));
+	lzx_bw_setup_wait_buff(ds);
+	ds->bw.count = CACHE_BITS;
+	if (full) {
+		ds->bw.buff = 0;
+		ds->bw.wait_bytes = ((n + 15) >> 3) & ~1;
+	} else {
+		ds->bw.wait_bytes = (n >> 3) & ~1;
+		n -= ds->bw.wait_bytes << 3;
+		if (n == 0)
+			ds->bw.buff = 0;
+		else {
+			ds->bw.buff <<= CACHE_BITS - n;
+			ds->bw.count -= n;
+		}
+	}
+	return (lzx_bw_out_waiting_bytes(strm));
 }
 
 static int
@@ -1656,18 +1651,7 @@ lzx_bw_putbits(struct lzx_stream *strm, int n, unsigned bits)
 	while (n >= ds->bw.count) {
 		ds->bw.buff |= x >> (n - ds->bw.count);
 		n -= ds->bw.count;
-		ds->bw.count = CACHE_BITS;
-		if (strm->avail_out == 0) {
-			if (n > 0)
-				lzx_bw_save_order(ds, n, x);
-			return (0);
-		} else if (strm->avail_out < sizeof(ds->bw.buff)) {
-			ds->bw.have_odd = sizeof(ds->bw.buff);
-			lzx_bw_fill(strm);
-			if (n > 0)
-				lzx_bw_save_order(ds, n, x);
-			return (0);
-		} else {
+		if (strm->avail_out >= sizeof(ds->bw.buff)) {
 			strm->next_out[0] = (uint8_t)(ds->bw.buff >> 48);
 			strm->next_out[1] = (uint8_t)(ds->bw.buff >> 56);
 			strm->next_out[2] = (uint8_t)(ds->bw.buff >> 32);
@@ -1680,11 +1664,11 @@ lzx_bw_putbits(struct lzx_stream *strm, int n, unsigned bits)
 			strm->avail_out -= sizeof(ds->bw.buff);
 			strm->total_out += sizeof(ds->bw.buff);
 			ds->bw.buff = 0;
-			if (strm->avail_out == 0) {
-				if (n > 0)
-					lzx_bw_save_order(ds, n, x);
-				return (0);
-			}
+			ds->bw.count = CACHE_BITS;
+		} else {
+			if (n > 0)
+				lzx_bw_save_order(ds, n, x);
+			return (lzx_bw_flush(strm, 1));
 		}
 	}
 	if (n > 0)
@@ -1693,7 +1677,7 @@ lzx_bw_putbits(struct lzx_stream *strm, int n, unsigned bits)
 }
 
 static int
-lzx_init_huf_stat(struct lzx_huf_stat *hs, int size)
+lzx_huf_tbl_init(struct lzx_huf_stat *hs, int size)
 {
 
 	if (hs->freq == NULL || hs->size < size) {
@@ -1724,7 +1708,16 @@ lzx_init_huf_stat(struct lzx_huf_stat *hs, int size)
 }
 
 static void
-lzx_reset_huf_stat(struct lzx_huf_stat *hs)
+lzx_huf_tbl_free(struct lzx_huf_stat *hs)
+{
+	free(hs->freq);
+	free(hs->blen);
+	free(hs->prev_blen);
+	free(hs->code);
+}
+
+static void
+lzx_huf_tbl_reset(struct lzx_huf_stat *hs)
 {
 	hs->total_bits = 0;
 	memset(hs->freq, 0, sizeof(hs->freq[0]) * (hs->size << 1));
@@ -1732,13 +1725,25 @@ lzx_reset_huf_stat(struct lzx_huf_stat *hs)
 	memset(hs->blen, 0, sizeof(hs->blen[0]) * hs->size);
 }
 
-static void
-lzx_free_huf_stat(struct lzx_huf_stat *hs)
+static int
+lzx_huf_pre_tree_init(struct lzx_huf_pre_tree *pt, int size)
 {
-	free(hs->freq);
-	free(hs->blen);
-	free(hs->prev_blen);
-	free(hs->code);
+	if (lzx_huf_tbl_init(&(pt->pt), 20) < 0)
+		return (-1);
+	if (pt->pt_max == 0) {
+		pt->pt_max = size;
+		pt->pt_data = malloc(pt->pt_max * sizeof(pt->pt_data[0]));
+		if (pt->pt_data == NULL)
+			return (-1);
+	}
+	return (0);
+}
+
+static void
+lzx_huf_pre_tree_free(struct lzx_huf_pre_tree *pt)
+{
+	lzx_huf_tbl_free(&(pt->pt));
+	free(pt->pt_data);
 }
 
 static int
@@ -1835,11 +1840,17 @@ lzx_encode_init(struct lzx_stream *strm, int w_bits)
 			goto error;
 	}
 
-	if (lzx_init_huf_stat(&ds->mt, (w_slot << 3) + 256) < 0)
+	if (lzx_huf_tbl_init(&ds->mt, (w_slot << 3) + 256) < 0)
 		goto error;
-	if (lzx_init_huf_stat(&ds->lt, 249) < 0)
+	if (lzx_huf_pre_tree_init(&ds->pre_mt256, 256) < 0)
 		goto error;
-	if (lzx_init_huf_stat(&ds->at, 8) < 0)
+	if (lzx_huf_pre_tree_init(&ds->pre_mtRemain, w_slot << 3) < 0)
+		goto error;
+	if (lzx_huf_tbl_init(&ds->lt, 249) < 0)
+		goto error;
+	if (lzx_huf_pre_tree_init(&ds->pre_lt, 249) < 0)
+		goto error;
+	if (lzx_huf_tbl_init(&ds->at, 8) < 0)
 		goto error;
 
 	if (ds->mt_max == 0) {
@@ -1863,12 +1874,6 @@ lzx_encode_init(struct lzx_stream *strm, int w_bits)
 			goto error;
 	}
 	ds->ft_pos = 0;
-	if (ds->pt_max == 0) {
-		ds->pt_max = (w_slot << 3) + 256;
-		ds->pt_data = malloc(ds->pt_max * sizeof(ds->pt_data[0]));
-		if (ds->pt_data == NULL)
-			goto error;
-	}
 
 	ds->bw.count = CACHE_BITS;
 
@@ -1887,7 +1892,7 @@ lzx_encode_init(struct lzx_stream *strm, int w_bits)
 	}
 	if (ds->match.link == NULL || w_size != ds->match.w_size) {
 		free(ds->match.link);
-		size = ((ds->match.w_bits * ds->match.w_size) + 7) >> 3;
+		size = ((ds->match.w_bits * (ds->match.w_size + 1))) >> 3;
 		ds->match.link = calloc(size, 1);
 		if (ds->match.link == NULL)
 			goto error;
@@ -1897,6 +1902,7 @@ lzx_encode_init(struct lzx_stream *strm, int w_bits)
 	ds->match.w_pos = -1;
 	ds->match.r0 = ds->match.r1 = ds->match.r2 = 1;
 	ds->chunk_bytes_out = CHUNK_SIZE;
+	ds->should_return_eoc = 0;
 	ds->error = LZX_OK;
 
 	return (LZX_OK);
@@ -1915,14 +1921,15 @@ lzx_encode_free(struct lzx_stream *strm)
 	free(strm->ds->huf_tree.heap);
 	free(strm->ds->huf_tree.left);
 	free(strm->ds->huf_tree.right);
-	lzx_free_huf_stat(&(strm->ds->mt));
-	lzx_free_huf_stat(&(strm->ds->lt));
-	lzx_free_huf_stat(&(strm->ds->at));
-	lzx_free_huf_stat(&(strm->ds->pt));
+	lzx_huf_tbl_free(&(strm->ds->mt));
+	lzx_huf_tbl_free(&(strm->ds->lt));
+	lzx_huf_tbl_free(&(strm->ds->at));
+	lzx_huf_pre_tree_free(&(strm->ds->pre_mt256));
+	lzx_huf_pre_tree_free(&(strm->ds->pre_mtRemain));
+	lzx_huf_pre_tree_free(&(strm->ds->pre_lt));
 	free(strm->ds->mt_data);
 	free(strm->ds->lt_data);
 	free(strm->ds->ft_data);
-	free(strm->ds->pt_data);
 	free(strm->ds->match.w_buff);
 	free(strm->ds->match.buff_top);
 	free(strm->ds->match.hash_tbl);
@@ -2054,7 +2061,7 @@ fprintf(stderr, "offset = %d, len = %d\n", m->pos, m->len);
 		c = (slot << 3) + len_header + 256;
 
 		if ((offset_bits = ds->footer_bits[slot]) > 0) {
-			ds->verbatim_bits += offset_bits;
+			ds->verbatim_offset_bits += offset_bits;
 			if (offset_bits >= 3) {
 				ds->at.freq[pos_footer&0x7]++;
 				ds->aligned_offset_bits += offset_bits - 3;
@@ -2082,8 +2089,8 @@ fprintf(stderr, "offset = %d, len = %d\n", m->pos, m->len);
 }
 
 static int
-lzx_make_pre_tree(struct lzx_enc *ds, struct lzx_huf_stat *hs,
-    int start, int end)
+lzx_make_pre_tree(struct lzx_enc *ds, struct lzx_huf_pre_tree *pt,
+    struct lzx_huf_stat *hs, int start, int end)
 {
 	uint16_t *freq;
 	uint8_t *blen, *prev_blen;
@@ -2091,14 +2098,13 @@ lzx_make_pre_tree(struct lzx_enc *ds, struct lzx_huf_stat *hs,
 	int pt_pos = 0;
 	int i;
 
-	if (lzx_init_huf_stat(&ds->pt, 20) < 0)
-		return (-1);
+	lzx_huf_tbl_reset(&(pt->pt));
 	if (end < 0 || end > hs->size)
 		end = hs->size;
 	blen = hs->blen;
 	prev_blen = hs->prev_blen;
-	pt_data = ds->pt_data;
-	freq = ds->pt.freq;
+	pt_data = pt->pt_data;
+	freq = pt->pt.freq;
 	for (i = start; i < end;) {
 		int c, j;
 
@@ -2157,20 +2163,21 @@ lzx_make_pre_tree(struct lzx_enc *ds, struct lzx_huf_stat *hs,
 		pt_data[pt_pos++] = c;
 		i++;
 	}
-	ds->pt_pos = pt_pos;
+	pt->pt_pos = pt_pos;
 
-	lzx_make_tree(ds, &(ds->pt));
+	lzx_make_tree(ds, &(pt->pt));
 	return (0);
 }
 
 static int
-lzx_output_pre_tree(struct lzx_stream *strm, struct lzx_enc *ds)
+lzx_output_pre_tree(struct lzx_stream *strm, struct lzx_enc *ds,
+    struct lzx_huf_pre_tree *pt)
 {
 	uint8_t *blen;
 	int i;
 
-	blen = ds->pt.blen;
-	for (i = ds->loop; i < ds->pt.size; i++) {
+	blen = pt->pt.blen;
+	for (i = ds->loop; i < pt->pt.size; i++) {
 		if (lzx_bw_putbits(strm, 4, blen[i]) == 0) {
 			ds->loop = i + 1;
 			return (0);
@@ -2181,17 +2188,18 @@ lzx_output_pre_tree(struct lzx_stream *strm, struct lzx_enc *ds)
 }
 
 static int
-lzx_output_path_lengths(struct lzx_stream *strm, struct lzx_enc *ds)
+lzx_output_path_lengths(struct lzx_stream *strm, struct lzx_enc *ds,
+    struct lzx_huf_pre_tree *pt)
 {
 	uint8_t *pt_data;
 	uint8_t *blen;
 	uint16_t *code;
 	int i;
 
-	pt_data = ds->pt_data;
-	blen = ds->pt.blen;
-	code = ds->pt.code;
-	for (i = ds->loop; i < ds->pt_pos;) {
+	pt_data = pt->pt_data;
+	blen = pt->pt.blen;
+	code = pt->pt.code;
+	for (i = ds->loop; i < pt->pt_pos;) {
 		int c, s, w; 
 
 		c = pt_data[i++];
@@ -2225,6 +2233,41 @@ lzx_output_path_lengths(struct lzx_stream *strm, struct lzx_enc *ds)
 	return (1);
 }
 
+static int
+lzx_sum_pre_tree_bits(struct lzx_huf_pre_tree *pt)
+{
+	uint8_t *pt_data;
+	uint8_t *blen;
+	int i, sum;
+
+	sum = 4 * pt->pt.size;
+	pt_data = pt->pt_data;
+	blen = pt->pt.blen;
+	for (i = 0; i < pt->pt_pos;) {
+		int c, s;
+
+		c = pt_data[i++];
+		s = blen[c];
+		switch (c) {
+		case 17:
+			i++;
+			s += 4;
+			break;
+		case 18:
+			i++;
+			s += 5;
+			break;
+		case 19:
+			i++;
+			c = pt_data[i++];
+			s += 1 + blen[c];
+			break;
+		}
+		sum += s;
+	}
+	return (sum);
+}
+
 static void
 lzx_reset_block(struct lzx_enc *ds)
 {
@@ -2232,17 +2275,20 @@ lzx_reset_block(struct lzx_enc *ds)
 	ds->output_block = NULL;
 	ds->state = LZX_ST_MATCHING;
 	ds->mt_pos = 0;
-	lzx_reset_huf_stat(&(ds->mt));
+	lzx_huf_tbl_reset(&(ds->mt));
 	ds->lt_pos = 0;
-	lzx_reset_huf_stat(&(ds->lt));
-	lzx_reset_huf_stat(&(ds->at));
+	lzx_huf_tbl_reset(&(ds->lt));
+	lzx_huf_tbl_reset(&(ds->at));
 	ds->ft_pos = 0;
 	ds->block_bytes = 0;
 	ds->block_singles = 0;
-	ds->verbatim_bits = 0;
+	ds->verbatim_offset_bits = 0;
 	ds->aligned_offset_bits = 0;
 }
 
+/*
+ * Output Uncompressed Block.
+ */
 static int
 lzx_output_uncompressed_block(struct lzx_stream *strm)
 {
@@ -2305,7 +2351,7 @@ lzx_output_uncompressed_block(struct lzx_stream *strm)
 		}
 		/* FALL THROUGH */
 	case 7:
-		if (!lzx_bw_flush(strm)) {
+		if (!lzx_bw_flush(strm, 1)) {
 			ds->block_state = 8;
 			return (LZX_OK);
 		}
@@ -2376,6 +2422,9 @@ lzx_output_uncompressed_block(struct lzx_stream *strm)
 	return (LZX_OK);
 }
 
+/*
+ * Output Verbatim and Aligned Offset Block.
+ */
 static int
 lzx_output_verbatim_block(struct lzx_stream *strm)
 {
@@ -2384,108 +2433,127 @@ lzx_output_verbatim_block(struct lzx_stream *strm)
 
 	switch (ds->block_state) {
 	case 0:
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 1:
-		if (ds->make_aligned_offset_block) {
-			for (i = ds->loop; i < 8; i++) {
-				if (!lzx_bw_putbits(strm, 3, ds->at.blen[i])) {
-					ds->loop = i + 1;
-					ds->block_state = 1;
-					return (LZX_OK);
-				}
-			}
-		}
-		/* FALL THROUGH */
-	case 2:
-		if (lzx_make_pre_tree(ds, &(ds->mt), 0, 256) < 0)
-			return (LZX_ERR_MEM);
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 3:
-		if (!lzx_output_pre_tree(strm, ds)) {
-			ds->block_state = 3;
-			return (LZX_OK);
-		}
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 4:
-		if (!lzx_output_path_lengths(strm, ds)) {
-			ds->block_state = 4;
-			return (LZX_OK);
-		}
-		/* FALL THROUGH */
-	case 5:
-		if (lzx_make_pre_tree(ds, &(ds->mt), 256, -1) < 0)
-			return (LZX_ERR_MEM);
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 6:
-		if (!lzx_output_pre_tree(strm, ds)) {
-			ds->block_state = 6;
-			return (LZX_OK);
-		}
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 7:
-		if (!lzx_output_path_lengths(strm, ds)) {
-			ds->block_state = 7;
-			return (LZX_OK);
-		}
-		/* FALL THROUGH */
-	case 8:
-		if (lzx_make_pre_tree(ds, &(ds->lt), 0, -1) < 0)
-			return (LZX_ERR_MEM);
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 9:
-		if (!lzx_output_pre_tree(strm, ds)) {
-			ds->block_state = 9;
-			return (LZX_OK);
-		}
-		ds->loop = 0;
-		/* FALL THROUGH */
-	case 10:
-		if (!lzx_output_path_lengths(strm, ds)) {
-			ds->block_state = 10;
-			return (LZX_OK);
-		}
-		/* FALL THROUGH */
-	case 11:
 		/* Output Translation = OFF, Block Type. */
 		if (ds->make_aligned_offset_block)
 			blocktype = ALIGNED_OFFSET_BLOCK;
 		else
 			blocktype = VERBATIM_BLOCK;
 		if (!lzx_bw_putbits(strm, 4, blocktype)) {
-			ds->block_state = 12;
+			ds->block_state = 0;
 			return (LZX_OK);
 		}
 		/* FALL THROUGH */
-	case 12:
+	case 1:
 		/* Output Block Size. */
 		if (!lzx_bw_putbits(strm, 24, (unsigned)ds->block_bytes)) {
-			ds->block_state = 13;
+			ds->block_state = 1;
 			return (LZX_OK);
 		}
+		ds->loop = 0;
 		/* FALL THROUGH */
-	case 13:
+	case 2:
+		if (ds->make_aligned_offset_block) {
+			/*
+			 * Output Aligned offset Tree.
+			 */
+			for (i = ds->loop; i < 8; i++) {
+				if (!lzx_bw_putbits(strm, 3, ds->at.blen[i])) {
+					ds->loop = i + 1;
+					ds->block_state = 2;
+					return (LZX_OK);
+				}
+			}
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 3:
+		/*
+		 * Output Pre-tree for first 256 elements of main tree.
+		 */
+		if (!lzx_output_pre_tree(strm, ds, &(ds->pre_mt256))) {
+			ds->block_state = 3;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 4:
+		/*
+		 * Output Path lengths for first 256 elements of main tree.
+		 */
+		if (!lzx_output_path_lengths(strm, ds, &(ds->pre_mt256))) {
+			ds->block_state = 4;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 5:
+		/*
+		 * Output Pre-tree for first remainder of main tree.
+		 */
+		if (!lzx_output_pre_tree(strm, ds, &(ds->pre_mtRemain))) {
+			ds->block_state = 5;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 6:
+		/*
+		 * Output Path lengths for remainder of main tree.
+		 */
+		if (!lzx_output_path_lengths(strm, ds, &(ds->pre_mtRemain))) {
+			ds->block_state = 6;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 7:
+		/*
+		 * Output Pre-tree for length tree.
+		 */
+		if (!lzx_output_pre_tree(strm, ds, &(ds->pre_lt))) {
+			ds->block_state = 7;
+			return (LZX_OK);
+		}
+		ds->loop = 0;
+		/* FALL THROUGH */
+	case 8:
+		/*
+		 * Output Path lengths for length tree.
+		 */
+		if (!lzx_output_path_lengths(strm, ds, &(ds->pre_lt))) {
+			ds->block_state = 8;
+			return (LZX_OK);
+		}
 		ds->mt_rp = 0;
 		ds->lt_rp = 0;
 		ds->ft_rp = 0;
 		/* FALL THROUGH */
-	case 14:
+	case 9:
+		/*
+		 * Output Token sequence.
+		 */
 		aligned = ds->make_aligned_offset_block;
+		ds->block_state = 9;
+		if (ds->chunk_bytes_out == 0) {
+			ds->chunk_bytes_out = CHUNK_SIZE;
+			if (lzx_bw_putbits(strm, ds->bw.count & 0x0f, 0)) {
+				if (lzx_bw_flush(strm, 0))
+					return (LZX_EOC);
+			}
+			ds->should_return_eoc = 1;
+			return (LZX_OK);
+		}
 		while (ds->mt_rp < ds->mt_pos) {
 			int c, b, d;
 
-			/* Output Main Tree element. */
 			c = ds->mt_data[ds->mt_rp++];
 			b = ds->mt.blen[c];
 			d = ds->mt.code[c];
 			if (c < 256) {
+				/* Output a literal. */
 				ds->chunk_bytes_out--;
 			} else {
+				/* Output a match. */
 				int bits;
 
 				c -= 256;
@@ -2512,6 +2580,7 @@ lzx_output_verbatim_block(struct lzx_stream *strm)
 						/* Output Verbatim bits. */
 						b += bits - 3;
 						d = (d << (bits-3)) + (pf>>3);
+
 						/* Output Aligned offset. */
 						pf &= 7;
 						bits = ds->at.blen[pf];
@@ -2526,22 +2595,28 @@ lzx_output_verbatim_block(struct lzx_stream *strm)
 				}
 			}
 			if (!lzx_bw_putbits(strm, b, d)) {
-				ds->block_state = 14;
+				if (ds->chunk_bytes_out == 0 &&
+				    ds->bw.order_n == 0) {
+					ds->chunk_bytes_out = CHUNK_SIZE;
+					ds->should_return_eoc = 1;
+				}
 				return (LZX_OK);
 			}
+
 			if (ds->chunk_bytes_out == 0) {
-				ds->block_state = 14;
 				ds->chunk_bytes_out = CHUNK_SIZE;
-				return (LZX_EOC);
+				b = ds->bw.count & 0x0f;
+				if (lzx_bw_putbits(strm, b, 0)) {
+					if (lzx_bw_flush(strm, 0))
+						return (LZX_EOC);
+				}
+				ds->should_return_eoc = 1;
+				return (LZX_OK);
 			}
 		}
 		break;
 	}
 	lzx_reset_block(ds);
-	if (ds->chunk_bytes_out == 0) {
-		ds->chunk_bytes_out = CHUNK_SIZE;
-		return (LZX_EOC);
-	}
 	return (LZX_OK);
 }
 
@@ -2549,8 +2624,8 @@ static int
 lzx_encode(struct lzx_stream *strm, int last)
 {
 	struct lzx_enc *ds = strm->ds;
-	int64_t avail_in, total_bits;
-	int64_t v_bits, a_bits;
+	int64_t avail_in;
+	int64_t a_bits, u_bits, v_bits, pre_tree_bits, token_bits;
 	int c, r;
 
 	if (ds->error)
@@ -2558,6 +2633,10 @@ lzx_encode(struct lzx_stream *strm, int last)
 
 	if (lzx_bw_fixup(strm) == 0)
 		return (LZX_OK);
+	if (ds->should_return_eoc) {
+		ds->should_return_eoc = 0;
+		return (LZX_EOC);
+	}
 
 	if (ds->output_block != NULL) {
 		r = ds->output_block(strm);
@@ -2582,28 +2661,54 @@ lzx_encode(struct lzx_stream *strm, int last)
 	if (c == -1)
 		return (LZX_OK);
 
+	/*
+	 * Make Huffman Trees.
+	 */
+	/* Make a main tree(matches and literals). */
 	lzx_make_tree(ds, &(ds->mt));
+	if (lzx_make_pre_tree(ds, &(ds->pre_mt256), &(ds->mt), 0, 256) < 0)
+		return (LZX_ERR_MEM);
+	if (lzx_make_pre_tree(ds, &(ds->pre_mtRemain), &(ds->mt), 256, -1) < 0)
+		return (LZX_ERR_MEM);
+	/* Make a match length tree. */
 	lzx_make_tree(ds, &(ds->lt));
+	if (lzx_make_pre_tree(ds, &(ds->pre_lt), &(ds->lt), 0, -1) < 0)
+		return (LZX_ERR_MEM);
+	/* Make a aligned offst tree. */
 	lzx_make_tree(ds, &(ds->at));
 
 	ds->state = LZX_ST_PUT_BLOCK;
-	total_bits = ds->mt.total_bits + ds->lt.total_bits;
-	v_bits = ds->verbatim_bits;
-	a_bits = 24 + ds->aligned_offset_bits + ds->at.total_bits;
+
+	/*
+	 * Calculate how many bits we will output.
+	 */
+	token_bits = ds->mt.total_bits + ds->lt.total_bits;
+	pre_tree_bits = lzx_sum_pre_tree_bits(&(ds->pre_mt256));
+	pre_tree_bits += lzx_sum_pre_tree_bits(&(ds->pre_mtRemain));
+	pre_tree_bits += lzx_sum_pre_tree_bits(&(ds->pre_lt));
+
+	/* Get total bits used for Uncompressed Block. */
+	u_bits = 15 + (32 * 3) + ds->block_bytes * 8;
+	if (ds->block_bytes & 1)
+		u_bits += 8;
+	/* Get total bits used for Verbatim Block. */
+	v_bits = token_bits + pre_tree_bits + ds->verbatim_offset_bits;
+	/* Get total bits used for Aligned Offset Block. */
+	a_bits = token_bits + pre_tree_bits + (8 * 3)
+		 + ds->aligned_offset_bits + ds->at.total_bits;
+
+	/* Choose smallest block. */
+	ds->output_block = lzx_output_verbatim_block;
 	if (v_bits > a_bits) {
 		ds->make_aligned_offset_block = 1;
-		total_bits += a_bits;
+		if (a_bits > u_bits)
+			ds->output_block = lzx_output_uncompressed_block;
 	} else {
 		ds->make_aligned_offset_block = 0;
-		total_bits += v_bits;
+		if (v_bits > u_bits)
+			ds->output_block = lzx_output_uncompressed_block;
 	}
-	total_bits += 80 * 3;
 	
-	if ((total_bits >> 3) > ds->block_bytes)
-		ds->output_block = lzx_output_uncompressed_block;
-	else
-		ds->output_block = lzx_output_verbatim_block;
-
 	r = ds->output_block(strm);
 	if (r != LZX_OK)
 		return (r);
@@ -2612,6 +2717,12 @@ lzx_encode(struct lzx_stream *strm, int last)
 	return (LZX_END);
 }
 
+/*********************************************************************
+ *
+ * Following code making huffman tree is based on public domain ar002
+ *  written by Haruhiko Okumura.
+ *
+ *********************************************************************/
 static void
 lzx_count_len(uint16_t i, int depth, uint16_t size, struct lzx_huf_tree *tp)
 {

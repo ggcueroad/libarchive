@@ -2946,8 +2946,8 @@ lzx_decode_blocks(struct lzx_stream *strm, int last)
 			/*
 			 * Compute a real position in window.
 			 */
-			copy_pos = (w_pos - copy_pos) & w_mask;
 fprintf(stderr, "pos=%d, len=%d, wpos=%d\n", copy_pos, copy_len, w_pos);
+			copy_pos = (w_pos - copy_pos) & w_mask;
 			/* FALL THROUGH */
 		case ST_COPY:
 			/*
