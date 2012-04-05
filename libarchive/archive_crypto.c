@@ -1518,11 +1518,21 @@ __archive_crc32_le(unsigned long crc, const void *_p, size_t len)
 	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
 		crc = crc_tbl[0][(crc ^ *p++) & 0xff] ^ (crc >> 8);
 
-	for (i = 0; i < (len & ~7); i += 8) {
+	for (i = 0; i < (len & ~15); i += 16) {
 		uint32_t crc2;
 
 		crc ^= *(const uint32_t *)(p + i);
 		crc2 = *(const uint32_t *)(p + i + 4);
+		crc = crc_tbl[7][crc & 0xff] ^
+		      crc_tbl[6][(crc >> 8) & 0xff] ^
+		      crc_tbl[5][(crc >> 16) & 0xff] ^
+		      crc_tbl[4][crc >> 24] ^
+		      crc_tbl[3][crc2 & 0xff] ^
+		      crc_tbl[2][(crc2 >> 8) & 0xff] ^
+		      crc_tbl[1][(crc2 >> 16) & 0xff] ^
+		      crc_tbl[0][crc2 >> 24] ^
+		      *(const uint32_t *)(p + i + 8);
+		crc2 = *(const uint32_t *)(p + i + 12);
 		crc = crc_tbl[7][crc & 0xff] ^
 		      crc_tbl[6][(crc >> 8) & 0xff] ^
 		      crc_tbl[5][(crc >> 16) & 0xff] ^
@@ -1580,11 +1590,21 @@ __archive_crc32_be(unsigned long crc, const void *_p, size_t len)
 	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
 		crc = crc_tbl[0][((crc >> 24) ^ *p++) & 0xff] ^ (crc << 8);
 
-	for (i = 0; i < (len & ~7); i += 8) {
+	for (i = 0; i < (len & ~15); i += 16) {
 		uint32_t crc2;
 
 		crc ^= *(const uint32_t *)(p + i);
 		crc2 = *(const uint32_t *)(p + i + 4);
+		crc = crc_tbl[4][crc & 0xff] ^
+		      crc_tbl[5][(crc >> 8) & 0xff] ^
+		      crc_tbl[6][(crc >> 16) & 0xff] ^
+		      crc_tbl[7][crc >> 24] ^
+		      crc_tbl[0][crc2 & 0xff] ^
+		      crc_tbl[1][(crc2 >> 8) & 0xff] ^
+		      crc_tbl[2][(crc2 >> 16) & 0xff] ^
+		      crc_tbl[3][crc2 >> 24] ^
+		      *(const uint32_t *)(p + i + 8);
+		crc2 = *(const uint32_t *)(p + i + 12);
 		crc = crc_tbl[4][crc & 0xff] ^
 		      crc_tbl[5][(crc >> 8) & 0xff] ^
 		      crc_tbl[6][(crc >> 16) & 0xff] ^
