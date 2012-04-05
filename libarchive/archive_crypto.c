@@ -28,6 +28,7 @@
 #include "archive_platform.h"
 
 #include "archive.h"
+#include "archive_crc32.h"
 #include "archive_crypto_private.h"
 
 /* In particular, force the configure probe to break if it tries
@@ -1425,3 +1426,195 @@ const struct archive_crypto __archive_crypto =
   &__archive_stub_sha512final
 #endif
 };
+
+/*
+ * When zlib is unavailable, we should still be able to validate
+ * uncompressed zip archives.  That requires us to be able to compute
+ * the CRC32 check value.  This is a drop-in compatible replacement
+ * for crc32() from zlib.
+ * This uses Slicing-By-8 algorithm and is based on public domain
+ * code http://www.strchr.com/media/cksum.c.
+ * Benchmarking CRC32 is available at http://www.strchr.com/crc32_popcnt
+ */
+#if !defined(LA_LITTLE_ENDIAN) && !defined(LA_BIG_ENDIAN)
+#  if defined(_WIN32) && !defined(__CYGWIN__)
+#    if defined(_M_IX86) || defined(_M_IA64)
+#      define LA_LITTLE_ENDIAN	1
+#    endif
+#  elif defined(__GNUC__)
+#    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#      define LA_LITTLE_ENDIAN	1
+#    elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#      define LA_LITTLE_ENDIAN	1
+#   endif
+#  else
+#    if defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)
+#      define LA_BIG_ENDIAN		1
+#    elif defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)
+#      define LA_LITTLE_ENDIAN	1
+#    endif
+#  endif
+#endif
+
+static uint32_t crc_tbl[8][256];
+
+static void
+crc32_init()
+{
+	uint32_t crc2, b, i;
+
+	for (b = 0; b < 256; ++b) {
+		crc2 = b;
+		for (i = 8; i > 0; --i) {
+			if (crc2 & 1)
+				crc2 = (crc2 >> 1) ^ 0xedb88320UL;
+			else
+				crc2 = (crc2 >> 1);
+		}
+		crc_tbl[0][b] = crc2;
+	}
+	for (b = 0; b < 256; ++b) {
+		crc2 = crc_tbl[0][b];
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[1][b] = crc2;
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[2][b] = crc2;
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[3][b] = crc2;
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[4][b] = crc2;
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[5][b] = crc2;
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[6][b] = crc2;
+		crc2 = (crc2 >> 8) ^ crc_tbl[0][crc2 & 0xff];
+		crc_tbl[7][b] = crc2;
+	}
+}
+
+#if !defined(LA_BIG_ENDIAN)
+/*
+ * For Little endian machine.
+ */
+#if defined(LA_LITTLE_ENDIAN)
+unsigned long
+__archive_crc32(unsigned long crc, const void *_p, size_t len)
+#else
+static unsigned long
+__archive_crc32_le(unsigned long crc, const void *_p, size_t len)
+#endif
+{
+	const unsigned char *p = _p;
+	static volatile int crc_tbl_inited = 0;
+	unsigned i;
+
+	if (!crc_tbl_inited) {
+		crc32_init();
+		crc_tbl_inited = 1;
+	}
+
+	crc = crc ^ 0xffffffffUL;
+	/* Compute crc32 to the first 4 bytes boundary. */
+	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
+		crc = crc_tbl[0][(crc ^ *p++) & 0xff] ^ (crc >> 8);
+
+	for (i = 0; i < (len & ~7); i += 8) {
+		uint32_t crc2;
+
+		crc ^= *(uint32_t *)(p + i);
+		crc2 = *(uint32_t *)(p + i + 4);
+		crc = crc_tbl[7][crc & 0xff] ^
+		      crc_tbl[6][(crc >> 8) & 0xff] ^
+		      crc_tbl[5][(crc >> 16) & 0xff] ^
+		      crc_tbl[4][crc >> 24] ^
+		      crc_tbl[3][crc2 & 0xff] ^
+		      crc_tbl[2][(crc2 >> 8) & 0xff] ^
+		      crc_tbl[1][(crc2 >> 16) & 0xff] ^
+		      crc_tbl[0][crc2 >> 24];
+	}
+
+	for (; i < len; i++)
+		crc = crc_tbl[0][(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+	return (crc ^ 0xffffffffUL);
+}
+#endif /* !LA_BIG_ENDIAN */
+
+#if !defined(LA_LITTLE_ENDIAN)
+/*
+ * For Big endian machine.
+ */
+#if defined(LA_BIG_ENDIAN)
+unsigned long
+__archive_crc32(unsigned long crc, const void *_p, size_t len)
+#else
+static unsigned long
+__archive_crc32_be(unsigned long crc, const void *_p, size_t len)
+#endif
+{
+	const uint8_t *p = _p;
+	static volatile int crc_tbl_inited = 0;
+	unsigned i;
+
+	if (!crc_tbl_inited) {
+		int b, i;
+
+		crc32_init();
+		for (i = 0; i < 8; i++) {
+			for (b = 0; b < 256; ++b) {
+				uint32_t crc2 = crc_tbl[i][b];
+				crc_tbl[i][b] = ((crc2 << 24) & 0xff000000) |
+						((crc2 <<  8) & 0x00ff0000) |
+						((crc2 >>  8) & 0x0000ff00) |
+						((crc2 >> 24) & 0x000000ff);
+			}
+		}
+		crc_tbl_inited = 1;
+	}
+
+	crc = (((crc << 24) & 0xff000000) |
+	       ((crc <<  8) & 0x00ff0000) |
+	       ((crc >>  8) & 0x0000ff00) |
+	       ((crc >> 24) & 0x000000ff)) ^ 0xffffffffUL;
+
+	/* Compute crc32 to the first 4 bytes boundary. */
+	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
+		crc = crc_tbl[0][((crc >> 24) ^ *p++) & 0xff] ^ (crc << 8);
+
+	for (i = 0; i < (len & ~7); i += 8) {
+		uint32_t crc2;
+
+		crc ^= *(uint32_t *)(p + i);
+		crc2 = *(uint32_t *)(p + i + 4);
+		crc = crc_tbl[4][crc & 0xff] ^
+		      crc_tbl[5][(crc >> 8) & 0xff] ^
+		      crc_tbl[6][(crc >> 16) & 0xff] ^
+		      crc_tbl[7][crc >> 24] ^
+		      crc_tbl[0][crc2 & 0xff] ^
+		      crc_tbl[1][(crc2 >> 8) & 0xff] ^
+		      crc_tbl[2][(crc2 >> 16) & 0xff] ^
+		      crc_tbl[3][crc2 >> 24];
+	}
+	for (; i < len; i++)
+		crc = crc_tbl[0][((crc >> 24) ^ p[i]) & 0xff] ^ (crc << 8);
+	return (((crc << 24) & 0xff000000) |
+	        ((crc <<  8) & 0x00ff0000) |
+	        ((crc >>  8) & 0x0000ff00) |
+	        ((crc >> 24) & 0x000000ff)) ^ 0xffffffffUL;
+}
+#endif /* !LA_LITTLE_ENDIAN */
+
+#if !defined(LA_LITTLE_ENDIAN) && !defined(LA_BIG_ENDIAN)
+/*
+ * For Unknown endianness, check which endian the program is running on.
+ */
+unsigned long
+__archive_crc32(unsigned long crc, const void *_p, size_t len)
+{
+	static const int crc32_endianness = 0x12345678;
+	const char *p = (const char *)&crc32_endianness;
+	if (*p == 0x12)
+		return __archive_crc32_be(crc, _p, len);
+	else
+		return __archive_crc32_le(crc, _p, len);
+}
+#endif
