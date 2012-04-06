@@ -132,6 +132,8 @@ archive_read_open_filenames(struct archive *a, const char **filenames,
 			mine->filename_type = FNT_MBS;
 		if (archive_read_append_callback_data(a, mine) != (ARCHIVE_OK))
 			return (ARCHIVE_FATAL);
+		if (filenames == NULL)
+			break;
 		filename = *(filenames++);
 	} while (filename != NULL && filename[0] != '\0');
 	archive_read_set_open_callback(a, file_open);
@@ -185,6 +187,7 @@ archive_read_open_filename_w(struct archive *a, const wchar_t *wfilename,
 				    "Failed to convert a wide-character"
 				    " filename to a multi-byte filename");
 			archive_string_free(&fn);
+			free(mine);
 			return (ARCHIVE_FATAL);
 		}
 		mine->filename_type = FNT_MBS;
