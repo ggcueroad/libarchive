@@ -1506,7 +1506,7 @@ __archive_crc32_le(unsigned long crc, const void *_p, size_t len)
 {
 	const unsigned char *p = _p;
 	static volatile int crc_tbl_inited = 0;
-	unsigned i;
+	size_t i;
 
 	if (!crc_tbl_inited) {
 		crc32_init();
@@ -1523,24 +1523,24 @@ __archive_crc32_le(unsigned long crc, const void *_p, size_t len)
 
 		crc ^= *(const uint32_t *)(p + i);
 		crc2 = *(const uint32_t *)(p + i + 4);
-		crc = crc_tbl[7][crc & 0xff] ^
-		      crc_tbl[6][(crc >> 8) & 0xff] ^
-		      crc_tbl[5][(crc >> 16) & 0xff] ^
-		      crc_tbl[4][crc >> 24] ^
-		      crc_tbl[3][crc2 & 0xff] ^
-		      crc_tbl[2][(crc2 >> 8) & 0xff] ^
-		      crc_tbl[1][(crc2 >> 16) & 0xff] ^
-		      crc_tbl[0][crc2 >> 24] ^
+		crc = crc_tbl[7][ crc & 0x000000ff] ^
+		      crc_tbl[6][(crc & 0x0000ff00) >> 8] ^
+		      crc_tbl[5][(crc & 0x00ff0000) >> 16] ^
+		      crc_tbl[4][(crc & 0xff000000) >> 24] ^
+		      crc_tbl[3][ crc2 & 0x000000ff] ^
+		      crc_tbl[2][(crc2 & 0x0000ff00) >> 8] ^
+		      crc_tbl[1][(crc2 & 0x00ff0000) >> 16] ^
+		      crc_tbl[0][(crc2 & 0xff000000) >> 24] ^
 		      *(const uint32_t *)(p + i + 8);
 		crc2 = *(const uint32_t *)(p + i + 12);
-		crc = crc_tbl[7][crc & 0xff] ^
-		      crc_tbl[6][(crc >> 8) & 0xff] ^
-		      crc_tbl[5][(crc >> 16) & 0xff] ^
-		      crc_tbl[4][crc >> 24] ^
-		      crc_tbl[3][crc2 & 0xff] ^
-		      crc_tbl[2][(crc2 >> 8) & 0xff] ^
-		      crc_tbl[1][(crc2 >> 16) & 0xff] ^
-		      crc_tbl[0][crc2 >> 24];
+		crc = crc_tbl[7][ crc & 0x000000ff] ^
+		      crc_tbl[6][(crc & 0x0000ff00) >> 8] ^
+		      crc_tbl[5][(crc & 0x00ff0000) >> 16] ^
+		      crc_tbl[4][(crc & 0xff000000) >> 24] ^
+		      crc_tbl[3][ crc2 & 0x000000ff] ^
+		      crc_tbl[2][(crc2 & 0x0000ff00) >> 8] ^
+		      crc_tbl[1][(crc2 & 0x00ff0000) >> 16] ^
+		      crc_tbl[0][(crc2 & 0xff000000) >> 24];
 	}
 
 	for (; i < len; i++)
@@ -1572,19 +1572,19 @@ __archive_crc32_be(unsigned long crc, const void *_p, size_t len)
 		for (i = 0; i < 8; i++) {
 			for (b = 0; b < 256; ++b) {
 				uint32_t crc2 = crc_tbl[i][b];
-				crc_tbl[i][b] = ((crc2 << 24) & 0xff000000) |
-						((crc2 <<  8) & 0x00ff0000) |
-						((crc2 >>  8) & 0x0000ff00) |
-						((crc2 >> 24) & 0x000000ff);
+				crc_tbl[i][b] = ((crc2 & 0x000000ff) << 24) |
+						((crc2 & 0x0000ff00) <<  8) |
+						((crc2 & 0x00ff0000) >>  8) |
+						((crc2 & 0xff000000) >> 24);
 			}
 		}
 		crc_tbl_inited = 1;
 	}
 
-	crc = (((crc << 24) & 0xff000000) |
-	       ((crc <<  8) & 0x00ff0000) |
-	       ((crc >>  8) & 0x0000ff00) |
-	       ((crc >> 24) & 0x000000ff)) ^ 0xffffffffUL;
+	crc = (((crc & 0x000000ff) << 24) |
+	       ((crc & 0x0000ff00) <<  8) |
+	       ((crc & 0x00ff0000) >>  8) |
+	       ((crc & 0xff000000) >> 24)) ^ 0xffffffffUL;
 
 	/* Compute crc32 to the first 4 bytes boundary. */
 	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
@@ -1595,31 +1595,31 @@ __archive_crc32_be(unsigned long crc, const void *_p, size_t len)
 
 		crc ^= *(const uint32_t *)(p + i);
 		crc2 = *(const uint32_t *)(p + i + 4);
-		crc = crc_tbl[4][crc & 0xff] ^
-		      crc_tbl[5][(crc >> 8) & 0xff] ^
-		      crc_tbl[6][(crc >> 16) & 0xff] ^
-		      crc_tbl[7][crc >> 24] ^
-		      crc_tbl[0][crc2 & 0xff] ^
-		      crc_tbl[1][(crc2 >> 8) & 0xff] ^
-		      crc_tbl[2][(crc2 >> 16) & 0xff] ^
-		      crc_tbl[3][crc2 >> 24] ^
+		crc = crc_tbl[4][ crc & 0x000000ff] ^
+		      crc_tbl[5][(crc & 0x0000ff00) >> 8] ^
+		      crc_tbl[6][(crc & 0x00ff0000) >> 16] ^
+		      crc_tbl[7][(crc & 0xff000000) >> 24] ^
+		      crc_tbl[0][ crc2 & 0x000000ff] ^
+		      crc_tbl[1][(crc2 & 0x0000ff00) >> 8] ^
+		      crc_tbl[2][(crc2 & 0x00ff0000) >> 16] ^
+		      crc_tbl[3][(crc2 & 0xff000000) >> 24] ^
 		      *(const uint32_t *)(p + i + 8);
 		crc2 = *(const uint32_t *)(p + i + 12);
-		crc = crc_tbl[4][crc & 0xff] ^
-		      crc_tbl[5][(crc >> 8) & 0xff] ^
-		      crc_tbl[6][(crc >> 16) & 0xff] ^
-		      crc_tbl[7][crc >> 24] ^
-		      crc_tbl[0][crc2 & 0xff] ^
-		      crc_tbl[1][(crc2 >> 8) & 0xff] ^
-		      crc_tbl[2][(crc2 >> 16) & 0xff] ^
-		      crc_tbl[3][crc2 >> 24];
+		crc = crc_tbl[4][ crc & 0x000000ff] ^
+		      crc_tbl[5][(crc & 0x0000ff00) >> 8] ^
+		      crc_tbl[6][(crc & 0x00ff0000) >> 16] ^
+		      crc_tbl[7][(crc & 0xff000000) >> 24] ^
+		      crc_tbl[0][ crc2 & 0x000000ff] ^
+		      crc_tbl[1][(crc2 & 0x0000ff00) >> 8] ^
+		      crc_tbl[2][(crc2 & 0x00ff0000) >> 16] ^
+		      crc_tbl[3][(crc2 & 0xff000000) >> 24];
 	}
 	for (; i < len; i++)
 		crc = crc_tbl[0][((crc >> 24) ^ p[i]) & 0xff] ^ (crc << 8);
-	return (((crc << 24) & 0xff000000) |
-	        ((crc <<  8) & 0x00ff0000) |
-	        ((crc >>  8) & 0x0000ff00) |
-	        ((crc >> 24) & 0x000000ff)) ^ 0xffffffffUL;
+	return (((crc & 0x000000ff) << 24) |
+	        ((crc & 0x0000ff00) <<  8) |
+	        ((crc & 0x00ff0000) >>  8) |
+	        ((crc & 0xff000000) >> 24)) ^ 0xffffffffUL;
 }
 #endif /* !LA_LITTLE_ENDIAN */
 
