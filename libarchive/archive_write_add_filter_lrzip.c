@@ -6,8 +6,7 @@
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer
- *    in this position and unchanged.
+ *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
@@ -22,22 +21,30 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD: head/lib/libarchive/archive_write_disk_private.h 201086 2009-12-28 02:17:53Z kientzle $
  */
 
-#ifndef __LIBARCHIVE_BUILD
-#error This header is only to be used internally to libarchive.
+#include "archive_platform.h"
+
+__FBSDID("$FreeBSD: head/lib/libarchive/archive_write_set_compression_lrzip.c 201081 2009-12-28 02:04:42Z kientzle $");
+
+#ifdef HAVE_ERRNO_H
+#include <errno.h>
 #endif
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
+#include <time.h>
 
-#ifndef ARCHIVE_WRITE_DISK_PRIVATE_H_INCLUDED
-#define ARCHIVE_WRITE_DISK_PRIVATE_H_INCLUDED
+#include "archive.h"
+#include "archive_private.h"
+#include "archive_write_private.h"
 
-#include "archive_acl_private.h"
-
-struct archive_write_disk;
 
 int
-archive_write_disk_set_acls(struct archive *, int /* fd */, const char * /* pathname */, struct archive_acl *);
-
-#endif
+archive_write_add_filter_lrzip(struct archive *a)
+{
+	return archive_write_add_filter_program(a, "lrzip");
+}
