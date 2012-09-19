@@ -229,6 +229,7 @@ pax_mode_append(struct bsdpax *bsdpax)
 
 	a = archive_read_new();
 	archive_read_support_filter_all(a);
+	archive_read_support_format_empty(a);
 	archive_read_support_format_tar(a);
 	archive_read_support_format_gnutar(a);
 	if (archive_read_open_fd(a, bsdpax->fd, bsdpax->bytes_per_block)
