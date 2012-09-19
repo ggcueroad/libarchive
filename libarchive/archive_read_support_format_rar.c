@@ -328,6 +328,7 @@ static int make_table_recurse(struct archive_read *, struct huffman_code *, int,
 static int64_t expand(struct archive_read *, int64_t);
 static int copy_from_lzss_window(struct archive_read *, const void **,
                                    int64_t, int);
+static const void *rar_read_ahead(struct archive_read *, size_t, ssize_t *);
 
 /*
  * Bit stream reader.
@@ -449,11 +450,9 @@ rar_br_fillup(struct archive_read *a, struct rar_br *br)
         __archive_read_consume(a, rar->bytes_unconsumed);
         rar->bytes_unconsumed = 0;
       }
-      br->next_in = __archive_read_ahead(a, 1, &(br->avail_in));
+      br->next_in = rar_read_ahead(a, 1, &(br->avail_in));
       if (br->next_in == NULL)
         return (0);
-      if (br->avail_in > rar->bytes_remaining)
-        br->avail_in = (ssize_t)rar->bytes_remaining;
       if (br->avail_in == 0)
         return (0);
     }
@@ -473,15 +472,13 @@ rar_br_preparation(struct archive_read *a, struct rar_br *br)
   struct rar *rar = (struct rar *)(a->format->data);
 
   if (rar->bytes_remaining > 0) {
-    br->next_in = __archive_read_ahead(a, 1, &(br->avail_in));
+    br->next_in = rar_read_ahead(a, 1, &(br->avail_in));
     if (br->next_in == NULL) {
       archive_set_error(&a->archive,
           ARCHIVE_ERRNO_FILE_FORMAT,
           "Truncated RAR file data");
       return (ARCHIVE_FATAL);
     }
-    if (br->avail_in > rar->bytes_remaining)
-      br->avail_in = (ssize_t)rar->bytes_remaining;
     if (br->cache_avail == 0)
       (void)rar_br_fillup(a, br);
   }
@@ -844,13 +841,6 @@ archive_read_format_rar_read_header(struct archive_read *a,
                             sizeof(rar->reserved2));
       }
 
-      if (rar->main_flags & MHD_VOLUME ||
-          rar->main_flags & MHD_FIRSTVOLUME)
-      {
-        archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
-                          "RAR volume support unavailable.");
-        return (ARCHIVE_FATAL);
-      }
       if (rar->main_flags & MHD_PASSWORD)
       {
         archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
@@ -875,6 +865,7 @@ archive_read_format_rar_read_header(struct archive_read *a,
     case SUB_HEAD:
     case PROTECT_HEAD:
     case SIGN_HEAD:
+    case ENDARC_HEAD:
       flags = archive_le16dec(p + 3);
       skip = archive_le16dec(p + 5);
       if (skip < 7) {
@@ -907,15 +898,14 @@ archive_read_format_rar_read_header(struct archive_read *a,
         return (ARCHIVE_FATAL);
       }
       __archive_read_consume(a, skip);
+      if (head_type == ENDARC_HEAD)
+        return (ARCHIVE_EOF);
       break;
 
     case NEWSUB_HEAD:
       if ((ret = read_header(a, entry, head_type)) < ARCHIVE_WARN)
         return ret;
       break;
-
-    case ENDARC_HEAD:
-      return (ARCHIVE_EOF);
 
     default:
       archive_set_error(&a->archive,  ARCHIVE_ERRNO_FILE_FORMAT,
@@ -975,6 +965,7 @@ archive_read_format_rar_read_data_skip(struct archive_read *a)
 {
   struct rar *rar;
   int64_t bytes_skipped;
+  int ret;
 
   rar = (struct rar *)(a->format->data);
 
@@ -989,6 +980,20 @@ archive_read_format_rar_read_data_skip(struct archive_read *a)
     if (bytes_skipped < 0)
       return (ARCHIVE_FATAL);
   }
+
+  /* Compressed data to skip must be read from each header in a multivolume
+   * archive.
+   */
+  if (rar->main_flags & MHD_VOLUME && rar->file_flags & FHD_SPLIT_AFTER)
+  {
+    ret = archive_read_format_rar_read_header(a, a->entry);
+    if (ret == (ARCHIVE_EOF))
+      ret = archive_read_format_rar_read_header(a, a->entry);
+    if (ret != (ARCHIVE_OK))
+      return ret;
+    return archive_read_format_rar_read_data_skip(a);
+  }
+
   return (ARCHIVE_OK);
 }
 
@@ -1136,6 +1141,14 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                       "Invalid sizes specified.");
     return (ARCHIVE_FATAL);
+  }
+
+  rar->bytes_remaining = rar->packed_size;
+  /* Split file in multivolume RAR. No more need to process header. */
+  if (rar->file_flags & FHD_SPLIT_BEFORE)
+  {
+    __archive_read_consume(a, header_size - 7);
+    return ret;
   }
 
   /* TODO: RARv3 subblocks contain comments. For now the complete block is
@@ -1330,7 +1343,6 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     return (ARCHIVE_FATAL);
   }
 
-  rar->bytes_remaining = rar->packed_size;
   rar->bytes_uncopied = rar->bytes_unconsumed = 0;
   rar->lzss.position = rar->offset = 0;
   rar->dictionary_size = 0;
@@ -1488,7 +1500,7 @@ read_symlink_stored(struct archive_read *a, struct archive_entry *entry,
   int ret = (ARCHIVE_OK);
 
   rar = (struct rar *)(a->format->data);
-  if ((h = __archive_read_ahead(a, (size_t)rar->packed_size, NULL)) == NULL)
+  if ((h = rar_read_ahead(a, (size_t)rar->packed_size, NULL)) == NULL)
     return (ARCHIVE_FATAL);
   p = h;
 
@@ -1518,7 +1530,8 @@ read_data_stored(struct archive_read *a, const void **buff, size_t *size,
   ssize_t bytes_avail;
 
   rar = (struct rar *)(a->format->data);
-  if (rar->bytes_remaining == 0)
+  if (rar->bytes_remaining == 0 &&
+    !(rar->main_flags & MHD_VOLUME && rar->file_flags & FHD_SPLIT_AFTER))
   {
     *buff = NULL;
     *size = 0;
@@ -1532,15 +1545,13 @@ read_data_stored(struct archive_read *a, const void **buff, size_t *size,
     return (ARCHIVE_EOF);
   }
 
-  *buff = __archive_read_ahead(a, 1, &bytes_avail);
+  *buff = rar_read_ahead(a, 1, &bytes_avail);
   if (bytes_avail <= 0)
   {
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                       "Truncated RAR file data");
     return (ARCHIVE_FATAL);
   }
-  if (bytes_avail > rar->bytes_remaining)
-    bytes_avail = (ssize_t)rar->bytes_remaining;
 
   *size = bytes_avail;
   *offset = rar->offset;
@@ -1987,17 +1998,21 @@ parse_codes(struct archive_read *a)
     /* Seems as though dictionary sizes are not used. Even so, minimize
      * memory usage as much as possible.
      */
+    void *new_window;
+    unsigned int new_size;
+
     if (rar->unp_size >= DICTIONARY_MAX_SIZE)
-      rar->dictionary_size = DICTIONARY_MAX_SIZE;
+      new_size = DICTIONARY_MAX_SIZE;
     else
-      rar->dictionary_size = rar_fls((unsigned int)rar->unp_size) << 1;
-    rar->lzss.window = (unsigned char *)realloc(rar->lzss.window,
-                                                rar->dictionary_size);
-    if (rar->lzss.window == NULL) {
+      new_size = rar_fls((unsigned int)rar->unp_size) << 1;
+    new_window = realloc(rar->lzss.window, new_size);
+    if (new_window == NULL) {
       archive_set_error(&a->archive, ENOMEM,
                         "Unable to allocate memory for uncompressed data.");
       return (ARCHIVE_FATAL);
     }
+    rar->lzss.window = (unsigned char *)new_window;
+    rar->dictionary_size = new_size;
     memset(rar->lzss.window, 0, rar->dictionary_size);
     rar->lzss.mask = rar->dictionary_size - 1;
   }
@@ -2235,10 +2250,12 @@ add_value(struct archive_read *a, struct huffman_code *code, int value,
 static int
 new_node(struct huffman_code *code)
 {
-  code->tree = (struct huffman_tree_node *)realloc(code->tree,
-    (code->numentries + 1) * sizeof(*code->tree));
-  if (code->tree == NULL)
+  void *new_tree;
+
+  new_tree = realloc(code->tree, (code->numentries + 1) * sizeof(*code->tree));
+  if (new_tree == NULL)
     return (-1);
+  code->tree = (struct huffman_tree_node *)new_tree;
   code->tree[code->numentries].branches[0] = -1;
   code->tree[code->numentries].branches[1] = -2;
   return 1;
@@ -2253,7 +2270,7 @@ make_table(struct archive_read *a, struct huffman_code *code)
     code->tablesize = code->maxlength;
 
   code->table =
-    (struct huffman_table_entry *)malloc(sizeof(*code->table)
+    (struct huffman_table_entry *)calloc(1, sizeof(*code->table)
     * (1 << code->tablesize));
 
   return make_table_recurse(a, code, 0, code->table, 0, code->tablesize);
@@ -2585,4 +2602,30 @@ copy_from_lzss_window(struct archive_read *a, const void **buffer,
   else
     *buffer = NULL;
   return (ARCHIVE_OK);
+}
+
+static const void *
+rar_read_ahead(struct archive_read *a, size_t min, ssize_t *avail)
+{
+  struct rar *rar = (struct rar *)(a->format->data);
+  const void *h = __archive_read_ahead(a, min, avail);
+  int ret;
+  if (avail)
+  {
+    if (*avail > rar->bytes_remaining)
+      *avail = (ssize_t)rar->bytes_remaining;
+    if (*avail < 0)
+      return NULL;
+    else if (*avail == 0 && rar->main_flags & MHD_VOLUME &&
+      rar->file_flags & FHD_SPLIT_AFTER)
+    {
+      ret = archive_read_format_rar_read_header(a, a->entry);
+      if (ret == (ARCHIVE_EOF))
+        ret = archive_read_format_rar_read_header(a, a->entry);
+      if (ret != (ARCHIVE_OK))
+        return NULL;
+      return rar_read_ahead(a, min, avail);
+    }
+  }
+  return h;
 }

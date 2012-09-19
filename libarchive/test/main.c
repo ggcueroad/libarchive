@@ -1868,6 +1868,18 @@ canGunzip(void)
 	return (value);
 }
 
+int
+canLrzip(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("lrzip -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
 /*
  * Can this filesystem handle nodump flags.
  */
@@ -2101,6 +2113,14 @@ is_LargeInode(const char *file)
 	return (ino > 0xffffffff);
 #endif
 }
+
+void
+extract_reference_files(const char **names)
+{
+	while (names && *names)
+		extract_reference_file(*names++);
+}
+
 /*
  *
  * TEST management

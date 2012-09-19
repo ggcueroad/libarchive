@@ -137,6 +137,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_read_support_filter_bzip2.c		\
 	libarchive/archive_read_support_filter_compress.c	\
 	libarchive/archive_read_support_filter_gzip.c		\
+	libarchive/archive_read_support_filter_lrzip.c		\
 	libarchive/archive_read_support_filter_none.c		\
 	libarchive/archive_read_support_filter_program.c	\
 	libarchive/archive_read_support_filter_rpm.c		\
@@ -164,6 +165,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_util.c				\
 	libarchive/archive_virtual.c				\
 	libarchive/archive_write.c				\
+	libarchive/archive_write_disk_acl.c			\
 	libarchive/archive_write_disk_posix.c			\
 	libarchive/archive_write_disk_private.h			\
 	libarchive/archive_write_disk_set_standard_lookup.c	\
@@ -176,6 +178,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_write_add_filter_bzip2.c	\
 	libarchive/archive_write_add_filter_compress.c	\
 	libarchive/archive_write_add_filter_gzip.c		\
+	libarchive/archive_write_add_filter_lrzip.c		\
 	libarchive/archive_write_add_filter_none.c		\
 	libarchive/archive_write_add_filter_program.c	\
 	libarchive/archive_write_add_filter_xz.c		\
@@ -258,7 +261,8 @@ libarchive_test_SOURCES=					\
 	libarchive/test/main.c					\
 	libarchive/test/read_open_memory.c			\
 	libarchive/test/test.h					\
-	libarchive/test/test_acl_freebsd.c			\
+	libarchive/test/test_acl_freebsd_posix1e.c		\
+	libarchive/test/test_acl_freebsd_nfs4.c			\
 	libarchive/test/test_acl_nfs4.c				\
 	libarchive/test/test_acl_pax.c				\
 	libarchive/test/test_acl_posix1e.c			\
@@ -273,6 +277,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_archive_read_close_twice.c		\
 	libarchive/test/test_archive_read_close_twice_open_fd.c	\
 	libarchive/test/test_archive_read_close_twice_open_filename.c	\
+	libarchive/test/test_archive_read_multiple_data_objects.c	\
 	libarchive/test/test_archive_read_next_header_empty.c	\
 	libarchive/test/test_archive_read_next_header_raw.c	\
 	libarchive/test/test_archive_read_open2.c		\
@@ -293,6 +298,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_compat_cpio.c			\
 	libarchive/test/test_compat_gtar.c			\
 	libarchive/test/test_compat_gzip.c			\
+	libarchive/test/test_compat_lrzip.c			\
 	libarchive/test/test_compat_lzip.c			\
 	libarchive/test/test_compat_lzma.c			\
 	libarchive/test/test_compat_mac.c			\
@@ -390,6 +396,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_compress.c			\
 	libarchive/test/test_write_compress_bzip2.c		\
 	libarchive/test/test_write_compress_gzip.c		\
+	libarchive/test/test_write_compress_lrzip.c		\
 	libarchive/test/test_write_compress_lzip.c		\
 	libarchive/test/test_write_compress_lzma.c		\
 	libarchive/test/test_write_compress_program.c		\
@@ -429,6 +436,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_format_zip_empty.c		\
 	libarchive/test/test_write_format_zip_no_compression.c	\
 	libarchive/test/test_write_open_memory.c		\
+	libarchive/test/test_write_zip_set_compression_store.c	\
 	libarchive/test/test_zip_filename_encoding.c
 
 libarchive_test_CPPFLAGS= -I$(top_srcdir)/libarchive -I$(top_builddir)/libarchive/test -DLIBARCHIVE_STATIC $(PLATFORMCPPFLAGS)
@@ -440,7 +448,7 @@ libarchive_test_LDADD= $(LTLIBICONV)
 libarchive/test/list.h: Makefile
 	cat $(top_srcdir)/libarchive/test/test_*.c | grep DEFINE_TEST > libarchive/test/list.h
 
-libarchive_TESTS_ENVIRONMENT= LIBARCHIVE_TEST_FILES=`cd $(top_srcdir);/bin/pwd`/libarchive/test
+libarchive_TESTS_ENVIRONMENT= LIBARCHIVE_TEST_FILES=`cd $(top_srcdir);/bin/pwd`/libarchive/test LRZIP=NOCONFIG
 
 libarchive_test_EXTRA_DIST=\
 	libarchive/test/list.h		\
@@ -476,6 +484,9 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_fuzz.cab.uu				\
 	libarchive/test/test_fuzz.lzh.uu				\
 	libarchive/test/test_pax_filename_encoding.tar.uu		\
+	libarchive/test/test_rar_multivolume_single_file.part1.rar.uu	\
+	libarchive/test/test_rar_multivolume_single_file.part2.rar.uu	\
+	libarchive/test/test_rar_multivolume_single_file.part3.rar.uu	\
 	libarchive/test/test_read_format_7zip_bcj_bzip2.7z.uu		\
 	libarchive/test/test_read_format_7zip_bcj_copy.7z.uu		\
 	libarchive/test/test_read_format_7zip_bcj_deflate.7z.uu		\
@@ -555,6 +566,10 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_rar_compress_best.rar.uu	\
 	libarchive/test/test_read_format_rar_compress_normal.rar.uu	\
 	libarchive/test/test_read_format_rar_multi_lzss_blocks.rar.uu	\
+	libarchive/test/test_read_format_rar_multivolume.part0001.rar.uu\
+	libarchive/test/test_read_format_rar_multivolume.part0002.rar.uu\
+	libarchive/test/test_read_format_rar_multivolume.part0003.rar.uu\
+	libarchive/test/test_read_format_rar_multivolume.part0004.rar.uu\
 	libarchive/test/test_read_format_rar_noeof.rar.uu		\
 	libarchive/test/test_read_format_rar_ppmd_lzss_conversion.rar.uu\
 	libarchive/test/test_read_format_rar_sfx.exe.uu			\
@@ -578,6 +593,15 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_zip_length_at_end.zip.uu	\
 	libarchive/test/test_read_format_zip_symlink.zip.uu		\
 	libarchive/test/test_read_format_zip_ux.zip.uu			\
+	libarchive/test/test_read_large_splitted_rar_aa.uu		\
+	libarchive/test/test_read_large_splitted_rar_ab.uu		\
+	libarchive/test/test_read_large_splitted_rar_ac.uu		\
+	libarchive/test/test_read_large_splitted_rar_ad.uu		\
+	libarchive/test/test_read_large_splitted_rar_ae.uu		\
+	libarchive/test/test_read_splitted_rar_aa.uu			\
+	libarchive/test/test_read_splitted_rar_ab.uu			\
+	libarchive/test/test_read_splitted_rar_ac.uu			\
+	libarchive/test/test_read_splitted_rar_ad.uu			\
 	libarchive/test/CMakeLists.txt					\
 	libarchive/test/README
 

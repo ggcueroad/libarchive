@@ -8,7 +8,8 @@ IF(ENABLE_TEST)
    main.c
     read_open_memory.c
     test.h
-    test_acl_freebsd.c
+    test_acl_freebsd_posix1e.c
+    test_acl_freebsd_nfs4.c
     test_acl_nfs4.c
     test_acl_pax.c
     test_acl_posix1e.c
@@ -23,6 +24,7 @@ IF(ENABLE_TEST)
     test_archive_read_close_twice.c
     test_archive_read_close_twice_open_fd.c
     test_archive_read_close_twice_open_filename.c
+    test_archive_read_multiple_data_objects.c
     test_archive_read_next_header_empty.c
     test_archive_read_next_header_raw.c
     test_archive_read_open2.c
@@ -43,6 +45,7 @@ IF(ENABLE_TEST)
     test_compat_cpio.c
     test_compat_gtar.c
     test_compat_gzip.c
+    test_compat_lrzip.c
     test_compat_lzip.c
     test_compat_lzma.c
     test_compat_mac.c
@@ -140,6 +143,7 @@ IF(ENABLE_TEST)
     test_write_compress.c
     test_write_compress_bzip2.c
     test_write_compress_gzip.c
+    test_write_compress_lrzip.c
     test_write_compress_lzip.c
     test_write_compress_lzma.c
     test_write_compress_program.c
@@ -178,6 +182,7 @@ IF(ENABLE_TEST)
     test_write_format_zip.c
     test_write_format_zip_empty.c
     test_write_format_zip_no_compression.c
+    test_write_zip_set_compression_store.c
     test_write_open_memory.c
     test_zip_filename_encoding.c
   )
@@ -210,6 +215,7 @@ IF(ENABLE_TEST)
   ENDMACRO (DEFINE_TEST _testname)
 
   INCLUDE(${CMAKE_CURRENT_BINARY_DIR}/list.h)
+  INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
 
   # Experimental new test handling
   ADD_CUSTOM_TARGET(run_libarchive_test

@@ -194,6 +194,13 @@ typedef int	archive_open_callback(struct archive *, void *_client_data);
 
 typedef int	archive_close_callback(struct archive *, void *_client_data);
 
+/* Switches from one client data object to the next/prev client data object.
+ * This is useful for reading from different data blocks such as a set of files
+ * that make up one large file.
+ */
+typedef int archive_switch_callback(struct archive *, void *_client_data1,
+			    void *_client_data2);
+
 /*
  * Codes to identify various stream filters.
  */
@@ -207,6 +214,7 @@ typedef int	archive_close_callback(struct archive *, void *_client_data);
 #define	ARCHIVE_FILTER_UU	7
 #define	ARCHIVE_FILTER_RPM	8
 #define	ARCHIVE_FILTER_LZIP	9
+#define	ARCHIVE_FILTER_LRZIP	10
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
 #define	ARCHIVE_COMPRESSION_NONE	ARCHIVE_FILTER_NONE
@@ -219,6 +227,7 @@ typedef int	archive_close_callback(struct archive *, void *_client_data);
 #define	ARCHIVE_COMPRESSION_UU		ARCHIVE_FILTER_UU
 #define	ARCHIVE_COMPRESSION_RPM		ARCHIVE_FILTER_RPM
 #define	ARCHIVE_COMPRESSION_LZIP	ARCHIVE_FILTER_LZIP
+#define	ARCHIVE_COMPRESSION_LRZIP	ARCHIVE_FILTER_LRZIP
 #endif
 
 /*
@@ -313,6 +322,7 @@ __LA_DECL int archive_read_support_filter_all(struct archive *);
 __LA_DECL int archive_read_support_filter_bzip2(struct archive *);
 __LA_DECL int archive_read_support_filter_compress(struct archive *);
 __LA_DECL int archive_read_support_filter_gzip(struct archive *);
+__LA_DECL int archive_read_support_filter_lrzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzma(struct archive *);
 __LA_DECL int archive_read_support_filter_none(struct archive *);
@@ -354,8 +364,23 @@ __LA_DECL int archive_read_set_skip_callback(struct archive *,
     archive_skip_callback *);
 __LA_DECL int archive_read_set_close_callback(struct archive *,
     archive_close_callback *);
-/* The callback data is provided to all of the callbacks above. */
+/* Callback used to switch between one data object to the next */
+__LA_DECL int archive_read_set_switch_callback(struct archive *,
+    archive_switch_callback *);
+
+/* This sets the first data object. */
 __LA_DECL int archive_read_set_callback_data(struct archive *, void *);
+/* This sets data object at specified index */
+__LA_DECL int archive_read_set_callback_data2(struct archive *, void *,
+    unsigned int);
+/* This adds a data object at the specified index. */
+__LA_DECL int archive_read_add_callback_data(struct archive *, void *,
+    unsigned int);
+/* This appends a data object to the end of list */
+__LA_DECL int archive_read_append_callback_data(struct archive *, void *);
+/* This prepends a data object to the beginning of list */
+__LA_DECL int archive_read_prepend_callback_data(struct archive *, void *);
+
 /* Opening freezes the callbacks. */
 __LA_DECL int archive_read_open1(struct archive *);
 
@@ -375,6 +400,10 @@ __LA_DECL int archive_read_open2(struct archive *, void *_client_data,
 /* Use this if you know the filename.  Note: NULL indicates stdin. */
 __LA_DECL int archive_read_open_filename(struct archive *,
 		     const char *_filename, size_t _block_size);
+/* Use this for reading multivolume files by filenames.
+ * NOTE: Must be NULL terminated. Sorting is NOT done. */
+__LA_DECL int archive_read_open_filenames(struct archive *,
+		     const char **_filenames, size_t _block_size);
 __LA_DECL int archive_read_open_filename_w(struct archive *,
 		     const wchar_t *_filename, size_t _block_size);
 /* archive_read_open_file() is a deprecated synonym for ..._open_filename(). */
@@ -563,6 +592,7 @@ __LA_DECL int archive_write_add_filter(struct archive *, int filter_code);
 __LA_DECL int archive_write_add_filter_bzip2(struct archive *);
 __LA_DECL int archive_write_add_filter_compress(struct archive *);
 __LA_DECL int archive_write_add_filter_gzip(struct archive *);
+__LA_DECL int archive_write_add_filter_lrzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lzma(struct archive *);
 __LA_DECL int archive_write_add_filter_none(struct archive *);
@@ -592,6 +622,8 @@ __LA_DECL int archive_write_set_format_shar_dump(struct archive *);
 __LA_DECL int archive_write_set_format_ustar(struct archive *);
 __LA_DECL int archive_write_set_format_xar(struct archive *);
 __LA_DECL int archive_write_set_format_zip(struct archive *);
+__LA_DECL int archive_write_zip_set_compression_deflate(struct archive *);
+__LA_DECL int archive_write_zip_set_compression_store(struct archive *);
 __LA_DECL int archive_write_open(struct archive *, void *,
 		     archive_open_callback *, archive_write_callback *,
 		     archive_close_callback *);
@@ -622,6 +654,10 @@ __LA_DECL __LA_SSIZE_T	 archive_write_data_block(struct archive *,
 
 __LA_DECL int		 archive_write_finish_entry(struct archive *);
 __LA_DECL int		 archive_write_close(struct archive *);
+/* Marks the archive as FATAL so that a subsequent free() operation
+ * won't try to close() cleanly.  Provides a fast abort capability
+ * when the client discovers that things have gone wrong. */
+__LA_DECL int            archive_write_fail(struct archive *);
 /* This can fail if the archive wasn't already closed, in which case
  * archive_write_free() will implicitly call archive_write_close(). */
 __LA_DECL int		 archive_write_free(struct archive *);

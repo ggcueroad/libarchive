@@ -490,14 +490,16 @@ ELSE()
 ENDIF()
 
 # FreeBSD libmd
-CHECK_LIBRARY_EXISTS(md "MD5Init" "" LIBMD_FOUND)
-IF(LIBMD_FOUND)
-  CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
-  SET(CMAKE_REQUIRED_LIBRARIES "md")
-  FIND_LIBRARY(LIBMD_LIBRARY NAMES md)
-  LIST(APPEND ADDITIONAL_LIBS ${LIBMD_LIBRARY})
-  CMAKE_POP_CHECK_STATE()	# Restore the state of the variables
-ENDIF(LIBMD_FOUND)
+IF(NOT OPENSSL_FOUND)
+  CHECK_LIBRARY_EXISTS(md "MD5Init" "" LIBMD_FOUND)
+  IF(LIBMD_FOUND)
+    CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
+    SET(CMAKE_REQUIRED_LIBRARIES "md")
+    FIND_LIBRARY(LIBMD_LIBRARY NAMES md)
+    LIST(APPEND ADDITIONAL_LIBS ${LIBMD_LIBRARY})
+    CMAKE_POP_CHECK_STATE()	# Restore the state of the variables
+  ENDIF(LIBMD_FOUND)
+ENDIF(NOT OPENSSL_FOUND)
 
 #
 # How to prove that CRYPTO functions, which have several names on various
@@ -1304,6 +1306,8 @@ IF(ENABLE_ACL)
   CHECK_FUNCTION_EXISTS(acl_get_perm_np HAVE_ACL_GET_PERM_NP)
   CHECK_FUNCTION_EXISTS(acl_get_link HAVE_ACL_GET_LINK)
   CHECK_FUNCTION_EXISTS(acl_get_link_np HAVE_ACL_GET_LINK_NP)
+  CHECK_FUNCTION_EXISTS(acl_is_trivial_np HAVE_ACL_IS_TRIVIAL_NP)
+  CHECK_FUNCTION_EXISTS(acl_set_link_np HAVE_ACL_SET_LINK_NP)
 
   # MacOS has an acl.h that isn't POSIX.  It can be detected by
   # checking for ACL_USER
