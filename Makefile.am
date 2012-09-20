@@ -926,6 +926,7 @@ endif
 #
 
 bsdpax_test_SOURCES=						\
+	$(test_utils_SOURCES)					\
 	pax/test/main.c						\
 	pax/test/test.h						\
 	pax/test/test_0.c					\
@@ -963,6 +964,7 @@ bsdpax_test_SOURCES=						\
 
 bsdpax_test_CPPFLAGS= \
 	-I$(top_srcdir)/libarchive -I$(top_srcdir)/libarchive_fe \
+	-I$(top_srcdir)/test_utils \
 	-I$(top_srcdir)/pax -I$(top_builddir)/pax/test \
 	$(PLATFORMCPPFLAGS)
 bsdpax_test_LDADD=libarchive_fe.la
