@@ -43,6 +43,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #include "archive.h"
+#include "archive_crc32.h"
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
 #include "archive_ppmd7_private.h"
@@ -50,9 +51,6 @@ __FBSDID("$FreeBSD$");
 #include "archive_read_private.h"
 #include "archive_endian.h"
 
-#ifndef HAVE_ZLIB_H
-#include "archive_crc32.h"
-#endif
 
 #define _7ZIP_SIGNATURE	"7z\xBC\xAF\x27\x1C"
 #define SFX_MIN_ADDR	0x27000
@@ -481,7 +479,7 @@ check_7zip_header_in_sfx(const char *p)
 		 * Magic Code, so we should do this in order not to
 		 * make a mis-detection.
 		 */
-		if (crc32(0, (const unsigned char *)p + 12, 20)
+		if (__archive_crc32(0, (const unsigned char *)p + 12, 20)
 			!= archive_le32dec(p + 8))
 			return (6); 
 		/* Hit the header! */
@@ -593,7 +591,7 @@ archive_read_format_7zip_read_header(struct archive_read *a,
 
 	zip->entry_offset = 0;
 	zip->end_of_entry = 0;
-	zip->entry_crc32 = crc32(0, NULL, 0);
+	zip->entry_crc32 = __archive_crc32(0, NULL, 0);
 
 	/* Setup a string conversion for a filename. */
 	if (zip->sconv == NULL) {
@@ -735,7 +733,8 @@ archive_read_format_7zip_read_data(struct archive_read *a,
 
 	/* Update checksum */
 	if ((zip->entry->flg & CRC32_IS_SET) && bytes)
-		zip->entry_crc32 = crc32(zip->entry_crc32, *buff, bytes);
+		zip->entry_crc32 =
+			__archive_crc32(zip->entry_crc32, *buff, bytes);
 
 	/* If we hit the end, swallow any end-of-data marker. */
 	if (zip->end_of_entry) {
@@ -2687,7 +2686,7 @@ header_bytes(struct archive_read *a, size_t rbytes)
 	}
 
 	/* Update checksum */
-	zip->header_crc32 = crc32(zip->header_crc32, p, rbytes);
+	zip->header_crc32 = __archive_crc32(zip->header_crc32, p, rbytes);
 	return (p);
 }
 
@@ -2721,7 +2720,7 @@ slurp_central_directory(struct archive_read *a, struct _7zip *zip,
 	}
 
 	/* CRC check. */
-	if (crc32(0, (const unsigned char *)p + 12, 20)
+	if (__archive_crc32(0, (const unsigned char *)p + 12, 20)
 	    != archive_le32dec(p + 8)) {
 		archive_set_error(&a->archive, -1, "Header CRC error");
 		return (ARCHIVE_FATAL);

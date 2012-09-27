@@ -38,6 +38,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_zip.c 201102
 #endif
 
 #include "archive.h"
+#include "archive_crc32.h"
 #include "archive_endian.h"
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
@@ -45,9 +46,6 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_zip.c 201102
 #include "archive_rb.h"
 #include "archive_read_private.h"
 
-#ifndef HAVE_ZLIB_H
-#include "archive_crc32.h"
-#endif
 
 struct zip_entry {
 	struct archive_rb_node	node;
@@ -615,7 +613,7 @@ zip_read_local_file_header(struct archive_read *a, struct archive_entry *entry,
 	zip->end_of_entry = 0;
 	zip->entry_uncompressed_bytes_read = 0;
 	zip->entry_compressed_bytes_read = 0;
-	zip->entry_crc32 = crc32(0, NULL, 0);
+	zip->entry_crc32 = __archive_crc32(0, NULL, 0);
 
 	/* Setup default conversion. */
 	if (zip->sconv == NULL && !zip->init_default_conversion) {
@@ -868,7 +866,8 @@ archive_read_format_zip_read_data(struct archive_read *a,
 		return (r);
 	/* Update checksum */
 	if (*size)
-		zip->entry_crc32 = crc32(zip->entry_crc32, *buff, *size);
+		zip->entry_crc32 =
+			__archive_crc32(zip->entry_crc32, *buff, *size);
 	/* If we hit the end, swallow any end-of-data marker. */
 	if (zip->end_of_entry) {
 		/* Check file size, CRC against these values. */

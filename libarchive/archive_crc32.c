@@ -104,6 +104,8 @@ __archive_crc32_le(unsigned long crc, const void *_p, size_t len)
 		crc32_init();
 		crc_tbl_inited = 1;
 	}
+	if (_p == NULL && len == 0)
+		return (0);
 
 	crc = crc ^ 0xffffffffUL;
 	/* Compute crc32 to the first 4 bytes boundary. */
@@ -167,6 +169,8 @@ __archive_crc32_be(unsigned long crc, const void *_p, size_t len)
 		}
 		crc_tbl_inited = 1;
 	}
+	if (_p == NULL && len == 0)
+		return (0);
 
 	crc = (((crc & 0x000000ff) << 24) |
 	       ((crc & 0x0000ff00) <<  8) |
