@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2009 Joerg  Sonnenberger
+ * Copyright (c) 2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,11 +30,5 @@
 #error This header is only to be used internally to libarchive.
 #endif
 
-/*
- * When zlib is unavailable, we should still be able to validate
- * uncompressed zip archives.  That requires us to be able to compute
- * the CRC32 check value.
- */
 unsigned long __archive_crc32(unsigned long crc, const void *_p, size_t len);
-#define crc32(c, p, l)	__archive_crc32(c, p, l)
 
