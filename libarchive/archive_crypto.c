@@ -1445,11 +1445,11 @@ const struct archive_crypto __archive_crypto =
 #    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #      define LA_LITTLE_ENDIAN	1
 #    elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#      define LA_LITTLE_ENDIAN	1
+#      define LA_BIG_ENDIAN	1
 #   endif
 #  else
 #    if defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)
-#      define LA_BIG_ENDIAN		1
+#      define LA_BIG_ENDIAN	1
 #    elif defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)
 #      define LA_LITTLE_ENDIAN	1
 #    endif
