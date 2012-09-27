@@ -283,6 +283,12 @@ typedef uint64_t uintmax_t;
 /* SHA512 via ARCHIVE_CRYPTO_SHA512_WIN supported. */
 #cmakedefine ARCHIVE_CRYPTO_SHA512_WIN 1
 
+/* Define to 1 if the system is big endian. */
+#cmakedefine ARCHIVE_BIG_ENDIAN 1
+
+/* Define to 1 if the system is little endian. */
+#cmakedefine ARCHIVE_LITTLE_ENDIAN 1
+
 /* Version number of bsdcpio */
 #cmakedefine BSDCPIO_VERSION_STRING "${BSDCPIO_VERSION_STRING}"
 

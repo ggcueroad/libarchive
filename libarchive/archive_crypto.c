@@ -1436,26 +1436,6 @@ const struct archive_crypto __archive_crypto =
  * code http://www.strchr.com/media/cksum.c.
  * Benchmarking CRC32 is available at http://www.strchr.com/crc32_popcnt
  */
-#if !defined(LA_LITTLE_ENDIAN) && !defined(LA_BIG_ENDIAN)
-#  if defined(_WIN32) && !defined(__CYGWIN__)
-#    if defined(_M_IX86) || defined(_M_IA64)
-#      define LA_LITTLE_ENDIAN	1
-#    endif
-#  elif defined(__GNUC__)
-#    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#      define LA_LITTLE_ENDIAN	1
-#    elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#      define LA_BIG_ENDIAN	1
-#   endif
-#  else
-#    if defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)
-#      define LA_BIG_ENDIAN	1
-#    elif defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)
-#      define LA_LITTLE_ENDIAN	1
-#    endif
-#  endif
-#endif
-
 static uint32_t crc_tbl[8][256];
 
 static void
@@ -1492,11 +1472,11 @@ crc32_init()
 	}
 }
 
-#if !defined(LA_BIG_ENDIAN)
+#if !defined(ARCHIVE_BIG_ENDIAN)
 /*
  * For Little endian machine.
  */
-#if defined(LA_LITTLE_ENDIAN)
+#if defined(ARCHIVE_LITTLE_ENDIAN)
 unsigned long
 __archive_crc32(unsigned long crc, const void *_p, size_t len)
 #else
@@ -1547,13 +1527,13 @@ __archive_crc32_le(unsigned long crc, const void *_p, size_t len)
 		crc = crc_tbl[0][(crc ^ p[i]) & 0xff] ^ (crc >> 8);
 	return (crc ^ 0xffffffffUL);
 }
-#endif /* !LA_BIG_ENDIAN */
+#endif /* !ARCHIVE_BIG_ENDIAN */
 
-#if !defined(LA_LITTLE_ENDIAN)
+#if !defined(ARCHIVE_LITTLE_ENDIAN)
 /*
  * For Big endian machine.
  */
-#if defined(LA_BIG_ENDIAN)
+#if defined(ARCHIVE_BIG_ENDIAN)
 unsigned long
 __archive_crc32(unsigned long crc, const void *_p, size_t len)
 #else
@@ -1621,9 +1601,9 @@ __archive_crc32_be(unsigned long crc, const void *_p, size_t len)
 	        ((crc & 0x00ff0000) >>  8) |
 	        ((crc & 0xff000000) >> 24)) ^ 0xffffffffUL;
 }
-#endif /* !LA_LITTLE_ENDIAN */
+#endif /* !ARCHIVE_LITTLE_ENDIAN */
 
-#if !defined(LA_LITTLE_ENDIAN) && !defined(LA_BIG_ENDIAN)
+#if !defined(ARCHIVE_LITTLE_ENDIAN) && !defined(ARCHIVE_BIG_ENDIAN)
 /*
  * For Unknown endianness, check which endian the program is running on.
  */

@@ -182,6 +182,7 @@ INCLUDE(CheckStructMember)
 INCLUDE(CheckSymbolExists)
 INCLUDE(CheckTypeExists)
 INCLUDE(CheckTypeSize)
+INCLUDE(TestBigEndian)
 
 #
 # Generate list.h
@@ -282,6 +283,16 @@ IF(DEFINED __GNUWIN32PATH AND EXISTS "${__GNUWIN32PATH}")
   # #    include <unixio.h>   /* for off_t */
   # #  endif
 ENDIF(DEFINED __GNUWIN32PATH AND EXISTS "${__GNUWIN32PATH}")
+
+#
+# Test which endian the system is.
+#
+TEST_BIG_ENDIAN(SYSTEM_IS_BIG_ENDIAN)
+IF(SYSTEM_IS_BIG_ENDIAN)
+  SET(ARCHIVE_BIG_ENDIAN 1)
+ELSE(SYSTEM_IS_BIG_ENDIAN)
+  SET(ARCHIVE_LITTLE_ENDIAN 1)
+ENDIF(SYSTEM_IS_BIG_ENDIAN)
 
 SET(ADDITIONAL_LIBS "")
 #
