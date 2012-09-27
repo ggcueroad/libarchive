@@ -134,6 +134,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_read_support_filter_bzip2.c		\
 	libarchive/archive_read_support_filter_compress.c	\
 	libarchive/archive_read_support_filter_gzip.c		\
+	libarchive/archive_read_support_filter_lrzip.c		\
 	libarchive/archive_read_support_filter_none.c		\
 	libarchive/archive_read_support_filter_program.c	\
 	libarchive/archive_read_support_filter_rpm.c		\
@@ -161,6 +162,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_util.c				\
 	libarchive/archive_virtual.c				\
 	libarchive/archive_write.c				\
+	libarchive/archive_write_disk_acl.c			\
 	libarchive/archive_write_disk_posix.c			\
 	libarchive/archive_write_disk_private.h			\
 	libarchive/archive_write_disk_set_standard_lookup.c	\
@@ -173,6 +175,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_write_add_filter_bzip2.c	\
 	libarchive/archive_write_add_filter_compress.c	\
 	libarchive/archive_write_add_filter_gzip.c		\
+	libarchive/archive_write_add_filter_lrzip.c		\
 	libarchive/archive_write_add_filter_none.c		\
 	libarchive/archive_write_add_filter_program.c	\
 	libarchive/archive_write_add_filter_xz.c		\
@@ -245,6 +248,11 @@ libarchive_EXTRA_DIST=			\
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = build/pkgconfig/libarchive.pc
 
+# Sources needed by all test programs
+test_utils_SOURCES= \
+	test_utils/test_utils.c \
+	test_utils/test_utils.h
+
 #
 #
 # libarchive_test program
@@ -252,10 +260,12 @@ pkgconfig_DATA = build/pkgconfig/libarchive.pc
 #
 libarchive_test_SOURCES=					\
 	$(libarchive_la_SOURCES)				\
+	$(test_utils_SOURCES)					\
 	libarchive/test/main.c					\
 	libarchive/test/read_open_memory.c			\
 	libarchive/test/test.h					\
-	libarchive/test/test_acl_freebsd.c			\
+	libarchive/test/test_acl_freebsd_posix1e.c		\
+	libarchive/test/test_acl_freebsd_nfs4.c			\
 	libarchive/test/test_acl_nfs4.c				\
 	libarchive/test/test_acl_pax.c				\
 	libarchive/test/test_acl_posix1e.c			\
@@ -291,6 +301,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_compat_cpio.c			\
 	libarchive/test/test_compat_gtar.c			\
 	libarchive/test/test_compat_gzip.c			\
+	libarchive/test/test_compat_lrzip.c			\
 	libarchive/test/test_compat_lzip.c			\
 	libarchive/test/test_compat_lzma.c			\
 	libarchive/test/test_compat_mac.c			\
@@ -388,6 +399,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_compress.c			\
 	libarchive/test/test_write_compress_bzip2.c		\
 	libarchive/test/test_write_compress_gzip.c		\
+	libarchive/test/test_write_compress_lrzip.c		\
 	libarchive/test/test_write_compress_lzip.c		\
 	libarchive/test/test_write_compress_lzma.c		\
 	libarchive/test/test_write_compress_program.c		\
@@ -414,7 +426,12 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_format_iso9660_filename.c	\
 	libarchive/test/test_write_format_iso9660_zisofs.c	\
 	libarchive/test/test_write_format_mtree.c		\
+	libarchive/test/test_write_format_mtree_absolute_path.c	\
+	libarchive/test/test_write_format_mtree_classic.c	\
+	libarchive/test/test_write_format_mtree_classic_indent.c\
 	libarchive/test/test_write_format_mtree_fflags.c	\
+	libarchive/test/test_write_format_mtree_no_separator.c	\
+	libarchive/test/test_write_format_mtree_quoted_filename.c\
 	libarchive/test/test_write_format_pax.c			\
 	libarchive/test/test_write_format_shar_empty.c		\
 	libarchive/test/test_write_format_tar.c			\
@@ -427,9 +444,10 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_format_zip_empty.c		\
 	libarchive/test/test_write_format_zip_no_compression.c	\
 	libarchive/test/test_write_open_memory.c		\
+	libarchive/test/test_write_zip_set_compression_store.c	\
 	libarchive/test/test_zip_filename_encoding.c
 
-libarchive_test_CPPFLAGS= -I$(top_srcdir)/libarchive -I$(top_builddir)/libarchive/test -DLIBARCHIVE_STATIC $(PLATFORMCPPFLAGS)
+libarchive_test_CPPFLAGS= -I$(top_srcdir)/libarchive -I$(top_srcdir)/test_utils -I$(top_builddir)/libarchive/test -DLIBARCHIVE_STATIC $(PLATFORMCPPFLAGS)
 libarchive_test_LDADD= $(LTLIBICONV)
 
 # The "list.h" file just lists all of the tests defined in all of the sources.
@@ -438,7 +456,7 @@ libarchive_test_LDADD= $(LTLIBICONV)
 libarchive/test/list.h: Makefile
 	cat $(top_srcdir)/libarchive/test/test_*.c | grep DEFINE_TEST > libarchive/test/list.h
 
-libarchive_TESTS_ENVIRONMENT= LIBARCHIVE_TEST_FILES=`cd $(top_srcdir);/bin/pwd`/libarchive/test
+libarchive_TESTS_ENVIRONMENT= LIBARCHIVE_TEST_FILES=`cd $(top_srcdir);/bin/pwd`/libarchive/test LRZIP=NOCONFIG
 
 libarchive_test_EXTRA_DIST=\
 	libarchive/test/list.h		\
@@ -551,6 +569,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_lha_withjunk.lzh.uu		\
 	libarchive/test/test_read_format_mtree.mtree.uu			\
 	libarchive/test/test_read_format_mtree_nomagic.mtree.uu		\
+	libarchive/test/test_read_format_mtree_nomagic2.mtree.uu	\
+	libarchive/test/test_read_format_mtree_nomagic3.mtree.uu	\
 	libarchive/test/test_read_format_rar.rar.uu			\
 	libarchive/test/test_read_format_rar_binary_data.rar.uu		\
 	libarchive/test/test_read_format_rar_compress_best.rar.uu	\
@@ -663,6 +683,7 @@ endif
 #
 
 bsdtar_test_SOURCES=						\
+	$(test_utils_SOURCES)					\
 	tar/test/main.c						\
 	tar/test/test.h						\
 	tar/test/test_0.c					\
@@ -700,6 +721,7 @@ bsdtar_test_SOURCES=						\
 
 bsdtar_test_CPPFLAGS=\
 	-I$(top_srcdir)/libarchive -I$(top_srcdir)/libarchive_fe \
+	-I$(top_srcdir)/test_utils \
 	-I$(top_srcdir)/tar -I$(top_builddir)/tar/test \
 	$(PLATFORMCPPFLAGS)
 
@@ -780,6 +802,7 @@ endif
 #
 
 bsdcpio_test_SOURCES=						\
+	$(test_utils_SOURCES)					\
 	cpio/cmdline.c						\
 	cpio/test/main.c					\
 	cpio/test/test.h					\
@@ -813,6 +836,7 @@ bsdcpio_test_SOURCES=						\
 
 bsdcpio_test_CPPFLAGS= \
 	-I$(top_srcdir)/libarchive -I$(top_srcdir)/libarchive_fe \
+	-I$(top_srcdir)/test_utils \
 	-I$(top_srcdir)/cpio -I$(top_builddir)/cpio/test \
 	$(PLATFORMCPPFLAGS)
 bsdcpio_test_LDADD=libarchive_fe.la

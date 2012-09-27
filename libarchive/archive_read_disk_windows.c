@@ -1208,7 +1208,7 @@ _archive_read_disk_open_w(struct archive *_a, const wchar_t *pathname)
 		a->tree = tree_open(pathname, a->symlink_mode, a->restore_time);
 	if (a->tree == NULL) {
 		archive_set_error(&a->archive, ENOMEM,
-		    "Can't allocate direcotry traversal data");
+		    "Can't allocate directory traversal data");
 		a->archive.state = ARCHIVE_STATE_FATAL;
 		return (ARCHIVE_FATAL);
 	}
@@ -1257,15 +1257,17 @@ update_current_filesystem(struct archive_read_disk *a, int64_t dev)
 	fid = t->max_filesystem_id++;
 	if (t->max_filesystem_id > t->allocated_filesytem) {
 		size_t s;
+		void *p;
 
 		s = t->max_filesystem_id * 2;
-		t->filesystem_table = realloc(t->filesystem_table,
-		    s * sizeof(*t->filesystem_table));
-		if (t->filesystem_table == NULL) {
+		p = realloc(t->filesystem_table,
+			s * sizeof(*t->filesystem_table));
+		if (p == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate tar data");
 			return (ARCHIVE_FATAL);
 		}
+		t->filesystem_table = (struct filesystem *)p;
 		t->allocated_filesytem = s;
 	}
 	t->current_filesystem_id = fid;

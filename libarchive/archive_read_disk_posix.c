@@ -984,7 +984,7 @@ next_entry(struct archive_read_disk *a, struct tree *t,
 #elif defined(EXT2_IOC_GETFLAGS) && defined(EXT2_NODUMP_FL) &&\
       defined(HAVE_WORKING_EXT2_IOC_GETFLAGS)
 		if (S_ISREG(st->st_mode) || S_ISDIR(st->st_mode)) {
-			unsigned long stflags;
+			int stflags;
 
 			t->entry_fd = open_on_current_dir(t,
 			    tree_current_access_path(t), O_RDONLY | O_NONBLOCK);
@@ -1359,15 +1359,17 @@ update_current_filesystem(struct archive_read_disk *a, int64_t dev)
 	fid = t->max_filesystem_id++;
 	if (t->max_filesystem_id > t->allocated_filesytem) {
 		size_t s;
+		void *p;
 
 		s = t->max_filesystem_id * 2;
-		t->filesystem_table = realloc(t->filesystem_table,
-		    s * sizeof(*t->filesystem_table));
-		if (t->filesystem_table == NULL) {
+		p = realloc(t->filesystem_table,
+		        s * sizeof(*t->filesystem_table));
+		if (p == NULL) {
 			archive_set_error(&a->archive, ENOMEM,
 			    "Can't allocate tar data");
 			return (ARCHIVE_FATAL);
 		}
+		t->filesystem_table = (struct filesystem *)p;
 		t->allocated_filesytem = s;
 	}
 	t->current_filesystem_id = fid;
@@ -2391,7 +2393,7 @@ tree_current_is_dir(struct tree *t)
 			return 1;
 		/* Not a dir; might be a link to a dir. */
 		/* If it's not a link, then it's not a link to a dir. */
-		if (!S_ISLNK(tree_current_lstat(t)->st_mode))
+		if (!S_ISLNK(st->st_mode))
 			return 0;
 		/*
 		 * It's a link, but we don't know what it's a link to,
