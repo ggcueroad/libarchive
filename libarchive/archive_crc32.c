@@ -89,66 +89,12 @@ crc32_init()
 	}
 }
 
-#if !defined(ARCHIVE_BIG_ENDIAN)
-/*
- * CRC32 calculation for little endian machine.
- */
-static unsigned long
-__archive_crc32_le(unsigned long crc, const void *_p, size_t len)
-{
-	const unsigned char *p = _p;
-	static volatile int crc_tbl_inited = 0;
-	size_t i;
-
-	if (!crc_tbl_inited) {
-		crc32_init();
-		crc_tbl_inited = 1;
-	}
-	if (_p == NULL && len == 0)
-		return (0);
-
-	crc = crc ^ 0xffffffffUL;
-	/* Compute crc32 to the first 4 bytes boundary. */
-	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
-		crc = crc_tbl[0][(crc ^ *p++) & 0xff] ^ (crc >> 8);
-
-	for (i = 0; i < (len & ~15); i += 16) {
-		uint32_t crc2;
-
-		crc ^= *(const uint32_t *)(p + i);
-		crc2 = *(const uint32_t *)(p + i + 4);
-		crc = crc_tbl[7][ crc & 0x000000ff] ^
-		      crc_tbl[6][(crc & 0x0000ff00) >> 8] ^
-		      crc_tbl[5][(crc & 0x00ff0000) >> 16] ^
-		      crc_tbl[4][(crc & 0xff000000) >> 24] ^
-		      crc_tbl[3][ crc2 & 0x000000ff] ^
-		      crc_tbl[2][(crc2 & 0x0000ff00) >> 8] ^
-		      crc_tbl[1][(crc2 & 0x00ff0000) >> 16] ^
-		      crc_tbl[0][(crc2 & 0xff000000) >> 24] ^
-		      *(const uint32_t *)(p + i + 8);
-		crc2 = *(const uint32_t *)(p + i + 12);
-		crc = crc_tbl[7][ crc & 0x000000ff] ^
-		      crc_tbl[6][(crc & 0x0000ff00) >> 8] ^
-		      crc_tbl[5][(crc & 0x00ff0000) >> 16] ^
-		      crc_tbl[4][(crc & 0xff000000) >> 24] ^
-		      crc_tbl[3][ crc2 & 0x000000ff] ^
-		      crc_tbl[2][(crc2 & 0x0000ff00) >> 8] ^
-		      crc_tbl[1][(crc2 & 0x00ff0000) >> 16] ^
-		      crc_tbl[0][(crc2 & 0xff000000) >> 24];
-	}
-
-	for (; i < len; i++)
-		crc = crc_tbl[0][(crc ^ p[i]) & 0xff] ^ (crc >> 8);
-	return (crc ^ 0xffffffffUL);
-}
-#endif /* !ARCHIVE_BIG_ENDIAN */
-
-#if !defined(ARCHIVE_LITTLE_ENDIAN)
+#if defined(WORDS_BIGENDIAN)
 /*
  * CRC32 calculation for big endian machine.
  */
 static unsigned long
-__archive_crc32_be(unsigned long crc, const void *_p, size_t len)
+__archive_crc32(unsigned long crc, const void *_p, size_t len)
 {
 	const uint8_t *p = _p;
 	static volatile int crc_tbl_inited = 0;
@@ -212,27 +158,58 @@ __archive_crc32_be(unsigned long crc, const void *_p, size_t len)
 	        ((crc & 0x00ff0000) >>  8) |
 	        ((crc & 0xff000000) >> 24)) ^ 0xffffffffUL;
 }
-#endif /* !ARCHIVE_LITTLE_ENDIAN */
-
-unsigned long
+#else /* WORDS_BIGENDIAN */
+/*
+ * CRC32 calculation for little endian machine.
+ */
+static unsigned long
 __archive_crc32(unsigned long crc, const void *_p, size_t len)
 {
-#if defined(ARCHIVE_LITTLE_ENDIAN)
-	return __archive_crc32_le(crc, _p, len);
-#elif defined(ARCHIVE_BIG_ENDIAN)
-	return __archive_crc32_be(crc, _p, len);
-#else
-	/*
-	 * When endianness is unknown in compile time, check which
-	 *  endian the program is running on.
-	 */
-	static const int crc32_endianness = 0x12345678;
-	const char *p = (const char *)&crc32_endianness;
-	if (*p == 0x12)
-		return __archive_crc32_be(crc, _p, len);
-	else
-		return __archive_crc32_le(crc, _p, len);
-#endif
+	const unsigned char *p = _p;
+	static volatile int crc_tbl_inited = 0;
+	size_t i;
+
+	if (!crc_tbl_inited) {
+		crc32_init();
+		crc_tbl_inited = 1;
+	}
+	if (_p == NULL && len == 0)
+		return (0);
+
+	crc = crc ^ 0xffffffffUL;
+	/* Compute crc32 to the first 4 bytes boundary. */
+	for (;(((uintptr_t)p) & (sizeof(uint32_t) -1)) != 0 && len; --len)
+		crc = crc_tbl[0][(crc ^ *p++) & 0xff] ^ (crc >> 8);
+
+	for (i = 0; i < (len & ~15); i += 16) {
+		uint32_t crc2;
+
+		crc ^= *(const uint32_t *)(p + i);
+		crc2 = *(const uint32_t *)(p + i + 4);
+		crc = crc_tbl[7][ crc & 0x000000ff] ^
+		      crc_tbl[6][(crc & 0x0000ff00) >> 8] ^
+		      crc_tbl[5][(crc & 0x00ff0000) >> 16] ^
+		      crc_tbl[4][(crc & 0xff000000) >> 24] ^
+		      crc_tbl[3][ crc2 & 0x000000ff] ^
+		      crc_tbl[2][(crc2 & 0x0000ff00) >> 8] ^
+		      crc_tbl[1][(crc2 & 0x00ff0000) >> 16] ^
+		      crc_tbl[0][(crc2 & 0xff000000) >> 24] ^
+		      *(const uint32_t *)(p + i + 8);
+		crc2 = *(const uint32_t *)(p + i + 12);
+		crc = crc_tbl[7][ crc & 0x000000ff] ^
+		      crc_tbl[6][(crc & 0x0000ff00) >> 8] ^
+		      crc_tbl[5][(crc & 0x00ff0000) >> 16] ^
+		      crc_tbl[4][(crc & 0xff000000) >> 24] ^
+		      crc_tbl[3][ crc2 & 0x000000ff] ^
+		      crc_tbl[2][(crc2 & 0x0000ff00) >> 8] ^
+		      crc_tbl[1][(crc2 & 0x00ff0000) >> 16] ^
+		      crc_tbl[0][(crc2 & 0xff000000) >> 24];
+	}
+
+	for (; i < len; i++)
+		crc = crc_tbl[0][(crc ^ p[i]) & 0xff] ^ (crc >> 8);
+	return (crc ^ 0xffffffffUL);
 }
+#endif /* !WORDS_BIGENDIAN */
 
 #endif /* HAVE_ZLIB_H */

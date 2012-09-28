@@ -419,9 +419,7 @@ AC_CHECK_TYPE([wchar_t],
 AC_HEADER_TIME
 
 # Check endianness
-AC_C_BIGENDIAN(
-	AC_DEFINE(ARCHIVE_BIG_ENDIAN, 1, [Platforma is big endian]),
-	AC_DEFINE(ARCHIVE_LITTLE_ENDIAN, 1, [Platforma is little endian]),,)
+AC_C_BIGENDIAN(,,,)
 
 # Checks for library functions.
 AC_PROG_GCC_TRADITIONAL
