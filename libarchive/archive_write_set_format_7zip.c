@@ -41,9 +41,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #include "archive.h"
-#ifndef HAVE_ZLIB_H
 #include "archive_crc32.h"
-#endif
 #include "archive_endian.h"
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
@@ -442,6 +440,14 @@ _7z_write_header(struct archive_write *a, struct archive_entry *entry)
 		file_free(file);
 		return (r);
 	}
+	if (file->size == 0 && file->dir) {
+		if (!__archive_rb_tree_insert_node(&(zip->rbtree),
+		    (struct archive_rb_node *)file)) {
+			/* We have already had the same file. */
+			file_free(file);
+			return (ARCHIVE_OK);
+		}
+	}
 
 	if (file->flg & MTIME_IS_SET)
 		zip->total_number_time_defined[MTIME]++;
@@ -450,11 +456,6 @@ _7z_write_header(struct archive_write *a, struct archive_entry *entry)
 	if (file->flg & ATIME_IS_SET)
 		zip->total_number_time_defined[ATIME]++;
 
-	if (file->size == 0 && file->dir) {
-		if (!__archive_rb_tree_insert_node(&(zip->rbtree),
-		    (struct archive_rb_node *)file))
-			file_free(file);
-	}
 	zip->total_number_entry++;
 	zip->total_bytes_entry_name += file->name_len + 2;
 	if (file->size == 0) {
@@ -501,7 +502,7 @@ _7z_write_header(struct archive_write *a, struct archive_entry *entry)
 		bytes = compress_out(a, p, (size_t)file->size, ARCHIVE_Z_RUN);
 		if (bytes < 0)
 			return ((int)bytes);
-		zip->entry_crc32 = crc32(zip->entry_crc32, p, bytes);
+		zip->entry_crc32 = __archive_crc32(zip->entry_crc32, p, bytes);
 		zip->entry_bytes_remaining -= bytes;
 	}
 
@@ -559,7 +560,8 @@ compress_out(struct archive_write *a, const void *buff, size_t s,
 		return (0);
 
 	if ((zip->crc32flg & PRECODE_CRC32) && s)
-		zip->precode_crc32 = crc32(zip->precode_crc32, buff, s);
+		zip->precode_crc32 =
+			__archive_crc32(zip->precode_crc32, buff, s);
 	zip->stream.next_in = (const unsigned char *)buff;
 	zip->stream.avail_in = s;
 	do {
@@ -574,7 +576,8 @@ compress_out(struct archive_write *a, const void *buff, size_t s,
 			zip->stream.next_out = zip->wbuff;
 			zip->stream.avail_out = sizeof(zip->wbuff);
 			if (zip->crc32flg & ENCODED_CRC32)
-				zip->encoded_crc32 = crc32(zip->encoded_crc32,
+				zip->encoded_crc32 = __archive_crc32(
+				    zip->encoded_crc32,
 				    zip->wbuff, sizeof(zip->wbuff));
 		}
 	} while (zip->stream.avail_in);
@@ -583,7 +586,8 @@ compress_out(struct archive_write *a, const void *buff, size_t s,
 		if (write_to_temp(a, zip->wbuff, (size_t)bytes) != ARCHIVE_OK)
 			return (ARCHIVE_FATAL);
 		if ((zip->crc32flg & ENCODED_CRC32) && bytes)
-			zip->encoded_crc32 = crc32(zip->encoded_crc32,
+			zip->encoded_crc32 = __archive_crc32(
+			    zip->encoded_crc32,
 			    zip->wbuff, (unsigned)bytes);
 	}
 
@@ -605,7 +609,7 @@ _7z_write_data(struct archive_write *a, const void *buff, size_t s)
 	bytes = compress_out(a, buff, s, ARCHIVE_Z_RUN);
 	if (bytes < 0)
 		return (bytes);
-	zip->entry_crc32 = crc32(zip->entry_crc32, buff, bytes);
+	zip->entry_crc32 = __archive_crc32(zip->entry_crc32, buff, bytes);
 	zip->entry_bytes_remaining -= bytes;
 	return (bytes);
 }
@@ -824,7 +828,8 @@ _7z_close(struct archive_write *a)
 	archive_le64enc(&wb[12], header_offset);/* Next Header Offset */
 	archive_le64enc(&wb[20], header_size);/* Next Header Size */
 	archive_le32enc(&wb[28], header_crc32);/* Next Header CRC */
-	archive_le32enc(&wb[8], crc32(0, &wb[12], 20));/* Start Header CRC */
+	archive_le32enc(&wb[8],
+		__archive_crc32(0, &wb[12], 20));/* Start Header CRC */
 	zip->wbuff_remaining -= 32;
 
 	/*

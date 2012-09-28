@@ -43,6 +43,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 #include "archive.h"
+#include "archive_crc32.h"
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
 #include "archive_ppmd7_private.h"
@@ -50,9 +51,6 @@ __FBSDID("$FreeBSD$");
 #include "archive_read_private.h"
 #include "archive_endian.h"
 
-#ifndef HAVE_ZLIB_H
-#include "archive_crc32.h"
-#endif
 
 #define _7ZIP_SIGNATURE	"7z\xBC\xAF\x27\x1C"
 #define SFX_MIN_ADDR	0x27000
@@ -481,7 +479,7 @@ check_7zip_header_in_sfx(const char *p)
 		 * Magic Code, so we should do this in order not to
 		 * make a mis-detection.
 		 */
-		if (crc32(0, (const unsigned char *)p + 12, 20)
+		if (__archive_crc32(0, (const unsigned char *)p + 12, 20)
 			!= archive_le32dec(p + 8))
 			return (6); 
 		/* Hit the header! */
@@ -593,7 +591,7 @@ archive_read_format_7zip_read_header(struct archive_read *a,
 
 	zip->entry_offset = 0;
 	zip->end_of_entry = 0;
-	zip->entry_crc32 = crc32(0, NULL, 0);
+	zip->entry_crc32 = __archive_crc32(0, NULL, 0);
 
 	/* Setup a string conversion for a filename. */
 	if (zip->sconv == NULL) {
@@ -684,8 +682,8 @@ archive_read_format_7zip_read_header(struct archive_read *a,
 			symname[symsize] = '\0';
 			archive_entry_copy_symlink(entry,
 			    (const char *)symname);
-			free(symname);
 		}
+		free(symname);
 		archive_entry_set_size(entry, 0);
 	}
 
@@ -709,16 +707,15 @@ archive_read_format_7zip_read_data(struct archive_read *a,
 	if (zip->pack_stream_bytes_unconsumed)
 		read_consume(a);
 
+	*offset = zip->entry_offset;
+	*size = 0;
+	*buff = NULL;
 	/*
 	 * If we hit end-of-entry last time, clean up and return
 	 * ARCHIVE_EOF this time.
 	 */
-	if (zip->end_of_entry) {
-		*offset = zip->entry_offset;
-		*size = 0;
-		*buff = NULL;
+	if (zip->end_of_entry)
 		return (ARCHIVE_EOF);
-	}
 
 	bytes = read_stream(a, buff,
 		(size_t)zip->entry_bytes_remaining, 0);
@@ -736,7 +733,8 @@ archive_read_format_7zip_read_data(struct archive_read *a,
 
 	/* Update checksum */
 	if ((zip->entry->flg & CRC32_IS_SET) && bytes)
-		zip->entry_crc32 = crc32(zip->entry_crc32, *buff, bytes);
+		zip->entry_crc32 =
+			__archive_crc32(zip->entry_crc32, *buff, bytes);
 
 	/* If we hit the end, swallow any end-of-data marker. */
 	if (zip->end_of_entry) {
@@ -1607,8 +1605,9 @@ read_Digests(struct archive_read *a, struct _7z_digests *d, size_t num)
 	const unsigned char *p;
 	unsigned i;
 
+	if (num == 0)
+		return (-1);
 	memset(d, 0, sizeof(*d));
-
 
 	d->defineds = malloc(num);
 	if (d->defineds == NULL)
@@ -2687,7 +2686,7 @@ header_bytes(struct archive_read *a, size_t rbytes)
 	}
 
 	/* Update checksum */
-	zip->header_crc32 = crc32(zip->header_crc32, p, rbytes);
+	zip->header_crc32 = __archive_crc32(zip->header_crc32, p, rbytes);
 	return (p);
 }
 
@@ -2721,7 +2720,7 @@ slurp_central_directory(struct archive_read *a, struct _7zip *zip,
 	}
 
 	/* CRC check. */
-	if (crc32(0, (const unsigned char *)p + 12, 20)
+	if (__archive_crc32(0, (const unsigned char *)p + 12, 20)
 	    != archive_le32dec(p + 8)) {
 		archive_set_error(&a->archive, -1, "Header CRC error");
 		return (ARCHIVE_FATAL);
@@ -2966,16 +2965,19 @@ extract_pack_stream(struct archive_read *a, size_t minimum)
 			 * Expand the uncompressed buffer up to
 			 * the minimum size.
 			 */
-			zip->uncompressed_buffer_size = minimum + 1023;
-			zip->uncompressed_buffer_size &= ~0x3ff;
-			zip->uncompressed_buffer =
-			    realloc(zip->uncompressed_buffer,
-				zip->uncompressed_buffer_size);
-			if (zip->uncompressed_buffer == NULL) {
+			void *p;
+			size_t new_size;
+
+			new_size = minimum + 1023;
+			new_size &= ~0x3ff;
+			p = realloc(zip->uncompressed_buffer, new_size);
+			if (p == NULL) {
 				archive_set_error(&a->archive, ENOMEM,
 				    "No memory for 7-Zip decompression");
 				return (ARCHIVE_FATAL);
 			}
+			zip->uncompressed_buffer = (unsigned char *)p;
+			zip->uncompressed_buffer_size = new_size;
 		}
 		/*
 		 * Move unconsumed bytes to the head.
@@ -3346,8 +3348,10 @@ setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
 		for (i = 0; i < 3; i++) {
 			const struct _7z_coder *coder = scoder[i];
 
-			if ((r = seek_pack(a)) < 0)
+			if ((r = seek_pack(a)) < 0) {
+				free(b[0]); free(b[1]); free(b[2]);
 				return (r);
+			}
 
 			if (sunpack[i] == (uint64_t)-1)
 				zip->folder_outbytes_remaining =
@@ -3356,13 +3360,16 @@ setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
 				zip->folder_outbytes_remaining = sunpack[i];
 
 			r = init_decompression(a, zip, coder, NULL);
-			if (r != ARCHIVE_OK)
+			if (r != ARCHIVE_OK) {
+				free(b[0]); free(b[1]); free(b[2]);
 				return (ARCHIVE_FATAL);
+			}
 
 			/* Allocate memory for the decorded data of a sub
 			 * stream. */
 			b[i] = malloc((size_t)zip->folder_outbytes_remaining);
 			if (b[i] == NULL) {
+				free(b[0]); free(b[1]); free(b[2]);
 				archive_set_error(&a->archive, ENOMEM,
 				    "No memory for 7-Zip decompression");
 				return (ARCHIVE_FATAL);
@@ -3371,13 +3378,17 @@ setup_decode_folder(struct archive_read *a, struct _7z_folder *folder,
 			/* Extract a sub stream. */
 			while (zip->pack_stream_inbytes_remaining > 0) {
 				r = extract_pack_stream(a, 0);
-				if (r < 0)
+				if (r < 0) {
+					free(b[0]); free(b[1]); free(b[2]);
 					return (r);
+				}
 				bytes = get_uncompressed_data(a, &buff,
 				    zip->uncompressed_buffer_bytes_remaining,
 				    0);
-				if (bytes < 0)
+				if (bytes < 0) {
+					free(b[0]); free(b[1]); free(b[2]);
 					return ((int)bytes);
+				}
 				memcpy(b[i]+s[i], buff, bytes);
 				s[i] += bytes;
 				if (zip->pack_stream_bytes_unconsumed)

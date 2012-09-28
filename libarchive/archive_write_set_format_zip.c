@@ -67,15 +67,13 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_write_set_format_zip.c 201168 20
 #endif
 
 #include "archive.h"
+#include "archive_crc32.h"
 #include "archive_endian.h"
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
 #include "archive_private.h"
 #include "archive_write_private.h"
 
-#ifndef HAVE_ZLIB_H
-#include "archive_crc32.h"
-#endif
 
 #define ZIP_SIGNATURE_LOCAL_FILE_HEADER 0x04034b50
 #define ZIP_SIGNATURE_DATA_DESCRIPTOR 0x08074b50
@@ -502,7 +500,7 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 		l->flags &= ~ZIP_FLAGS_UTF8_NAME;
 
 	/* Initialize the CRC variable and potentially the local crc32(). */
-	l->crc32 = crc32(0, NULL, 0);
+	l->crc32 = __archive_crc32(0, NULL, 0);
 	if (type == AE_IFLNK) {
 		const char *p = archive_entry_symlink(l->entry);
 		if (p != NULL)
@@ -621,7 +619,7 @@ archive_write_zip_header(struct archive_write *a, struct archive_entry *entry)
 		if (ret != ARCHIVE_OK)
 			return (ARCHIVE_FATAL);
 		zip->written_bytes += size;
-		l->crc32 = crc32(l->crc32, p, (unsigned)size);
+		l->crc32 = __archive_crc32(l->crc32, p, (unsigned)size);
 	}
 
 	if (ret2 != ARCHIVE_OK)
@@ -648,7 +646,7 @@ archive_write_zip_data(struct archive_write *a, const void *buff, size_t s)
 		zip->written_bytes += s;
 		zip->remaining_data_bytes -= s;
 		l->compressed_size += s;
-		l->crc32 = crc32(l->crc32, buff, s);
+		l->crc32 = __archive_crc32(l->crc32, buff, s);
 		return (s);
 #if HAVE_ZLIB_H
 	case COMPRESSION_DEFLATE:
@@ -671,7 +669,7 @@ archive_write_zip_data(struct archive_write *a, const void *buff, size_t s)
 		} while (zip->stream.avail_in != 0);
 		zip->remaining_data_bytes -= s;
 		/* If we have it, use zlib's fast crc32() */
-		l->crc32 = crc32(l->crc32, buff, s);
+		l->crc32 = __archive_crc32(l->crc32, buff, s);
 		return (s);
 #endif
 

@@ -90,6 +90,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_acl.c				\
 	libarchive/archive_acl_private.h			\
 	libarchive/archive_check_magic.c			\
+	libarchive/archive_crc32.c				\
 	libarchive/archive_crc32.h				\
 	libarchive/archive_crypto.c				\
 	libarchive/archive_crypto_private.h			\
@@ -248,6 +249,11 @@ libarchive_EXTRA_DIST=			\
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = build/pkgconfig/libarchive.pc
 
+# Sources needed by all test programs
+test_utils_SOURCES= \
+	test_utils/test_utils.c \
+	test_utils/test_utils.h
+
 #
 #
 # libarchive_test program
@@ -255,6 +261,7 @@ pkgconfig_DATA = build/pkgconfig/libarchive.pc
 #
 libarchive_test_SOURCES=					\
 	$(libarchive_la_SOURCES)				\
+	$(test_utils_SOURCES)					\
 	libarchive/test/main.c					\
 	libarchive/test/read_open_memory.c			\
 	libarchive/test/test.h					\
@@ -420,7 +427,12 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_format_iso9660_filename.c	\
 	libarchive/test/test_write_format_iso9660_zisofs.c	\
 	libarchive/test/test_write_format_mtree.c		\
+	libarchive/test/test_write_format_mtree_absolute_path.c	\
+	libarchive/test/test_write_format_mtree_classic.c	\
+	libarchive/test/test_write_format_mtree_classic_indent.c\
 	libarchive/test/test_write_format_mtree_fflags.c	\
+	libarchive/test/test_write_format_mtree_no_separator.c	\
+	libarchive/test/test_write_format_mtree_quoted_filename.c\
 	libarchive/test/test_write_format_pax.c			\
 	libarchive/test/test_write_format_shar_empty.c		\
 	libarchive/test/test_write_format_tar.c			\
@@ -436,7 +448,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_zip_set_compression_store.c	\
 	libarchive/test/test_zip_filename_encoding.c
 
-libarchive_test_CPPFLAGS= -I$(top_srcdir)/libarchive -I$(top_builddir)/libarchive/test -DLIBARCHIVE_STATIC $(PLATFORMCPPFLAGS)
+libarchive_test_CPPFLAGS= -I$(top_srcdir)/libarchive -I$(top_srcdir)/test_utils -I$(top_builddir)/libarchive/test -DLIBARCHIVE_STATIC $(PLATFORMCPPFLAGS)
 libarchive_test_LDADD= $(LTLIBICONV)
 
 # The "list.h" file just lists all of the tests defined in all of the sources.
@@ -558,6 +570,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_lha_withjunk.lzh.uu		\
 	libarchive/test/test_read_format_mtree.mtree.uu			\
 	libarchive/test/test_read_format_mtree_nomagic.mtree.uu		\
+	libarchive/test/test_read_format_mtree_nomagic2.mtree.uu	\
+	libarchive/test/test_read_format_mtree_nomagic3.mtree.uu	\
 	libarchive/test/test_read_format_rar.rar.uu			\
 	libarchive/test/test_read_format_rar_binary_data.rar.uu		\
 	libarchive/test/test_read_format_rar_compress_best.rar.uu	\
@@ -670,6 +684,7 @@ endif
 #
 
 bsdtar_test_SOURCES=						\
+	$(test_utils_SOURCES)					\
 	tar/test/main.c						\
 	tar/test/test.h						\
 	tar/test/test_0.c					\
@@ -707,6 +722,7 @@ bsdtar_test_SOURCES=						\
 
 bsdtar_test_CPPFLAGS=\
 	-I$(top_srcdir)/libarchive -I$(top_srcdir)/libarchive_fe \
+	-I$(top_srcdir)/test_utils \
 	-I$(top_srcdir)/tar -I$(top_builddir)/tar/test \
 	$(PLATFORMCPPFLAGS)
 
@@ -787,6 +803,7 @@ endif
 #
 
 bsdcpio_test_SOURCES=						\
+	$(test_utils_SOURCES)					\
 	cpio/cmdline.c						\
 	cpio/test/main.c					\
 	cpio/test/test.h					\
@@ -820,6 +837,7 @@ bsdcpio_test_SOURCES=						\
 
 bsdcpio_test_CPPFLAGS= \
 	-I$(top_srcdir)/libarchive -I$(top_srcdir)/libarchive_fe \
+	-I$(top_srcdir)/test_utils \
 	-I$(top_srcdir)/cpio -I$(top_builddir)/cpio/test \
 	$(PLATFORMCPPFLAGS)
 bsdcpio_test_LDADD=libarchive_fe.la

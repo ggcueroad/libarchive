@@ -1,6 +1,6 @@
-/*-
- * Copyright (c) 2009 Joerg  Sonnenberger
- * Copyright (c) 2012 Michihiro NAKAJIMA
+/*
+ * Copyright (c) 2003-2012 Tim Kientzle
+ * Copyright (c) 2012 Andres Mejia
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -22,13 +22,18 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * $FreeBSD: head/lib/libarchive/archive_crc32.h 201102 2009-12-28 03:11:36Z kientzle $
  */
 
-#ifndef __LIBARCHIVE_BUILD
-#error This header is only to be used internally to libarchive.
-#endif
+#ifndef TEST_UTILS_H
+#define TEST_UTILS_H
 
-unsigned long __archive_crc32(unsigned long crc, const void *_p, size_t len);
+struct test_list_t
+{
+  void (*func)(void);
+  const char *name;
+  int failures;
+};
 
+int get_test_set(int *, int, const char *, struct test_list_t *);
+
+#endif /* TEST_UTILS_H */

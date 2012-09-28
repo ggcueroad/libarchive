@@ -31,14 +31,9 @@
 #endif
 #include <time.h>
 #include <limits.h>
-#ifdef HAVE_ZLIB_H
-#include <zlib.h> /* crc32 */
-#endif
 
 #include "archive.h"
-#ifndef HAVE_ZLIB_H
 #include "archive_crc32.h"
-#endif
 #include "archive_endian.h"
 #include "archive_entry.h"
 #include "archive_entry_locale.h"
@@ -848,7 +843,7 @@ archive_read_format_rar_read_header(struct archive_read *a,
         return (ARCHIVE_FATAL);
       }
 
-      crc32_val = crc32(0, (const unsigned char *)p + 2, skip - 2);
+      crc32_val = __archive_crc32(0, (const unsigned char *)p + 2, skip - 2);
       if ((crc32_val & 0xffff) != archive_le16dec(p)) {
         archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
           "Header CRC error");
@@ -891,7 +886,7 @@ archive_read_format_rar_read_header(struct archive_read *a,
         p = h;
       }
 
-      crc32_val = crc32(0, (const unsigned char *)p + 2, skip - 2);
+      crc32_val = __archive_crc32(0, (const unsigned char *)p + 2, skip - 2);
       if ((crc32_val & 0xffff) != archive_le16dec(p)) {
         archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
           "Header CRC error");
@@ -1059,7 +1054,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
       "Invalid header size");
     return (ARCHIVE_FATAL);
   }
-  crc32_val = crc32(0, (const unsigned char *)p + 2, 7 - 2);
+  crc32_val = __archive_crc32(0, (const unsigned char *)p + 2, 7 - 2);
   __archive_read_consume(a, 7);
 
   if (!(rar->file_flags & FHD_SOLID))
@@ -1093,7 +1088,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     return (ARCHIVE_FATAL);
 
   /* File Header CRC check. */
-  crc32_val = crc32(crc32_val, h, (unsigned)(header_size - 7));
+  crc32_val = __archive_crc32(crc32_val, h, (unsigned)(header_size - 7));
   if ((crc32_val & 0xffff) != archive_le16dec(rar_header.crc)) {
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
       "Header CRC error");
@@ -1559,7 +1554,8 @@ read_data_stored(struct archive_read *a, const void **buff, size_t *size,
   rar->bytes_remaining -= bytes_avail;
   rar->bytes_unconsumed = bytes_avail;
   /* Calculate File CRC. */
-  rar->crc_calculated = crc32(rar->crc_calculated, *buff, bytes_avail);
+  rar->crc_calculated =
+	__archive_crc32(rar->crc_calculated, *buff, bytes_avail);
   return (ARCHIVE_OK);
 }
 
@@ -1589,7 +1585,8 @@ read_data_compressed(struct archive_read *a, const void **buff, size_t *size,
         *offset = rar->offset_outgoing;
         rar->offset_outgoing += *size;
         /* Calculate File CRC. */
-        rar->crc_calculated = crc32(rar->crc_calculated, *buff, *size);
+        rar->crc_calculated =
+		__archive_crc32(rar->crc_calculated, *buff, *size);
         rar->unp_offset = 0;
         return (ARCHIVE_OK);
       }
@@ -1622,7 +1619,8 @@ read_data_compressed(struct archive_read *a, const void **buff, size_t *size,
         *offset = rar->offset_outgoing;
         rar->offset_outgoing += *size;
         /* Calculate File CRC. */
-        rar->crc_calculated = crc32(rar->crc_calculated, *buff, *size);
+        rar->crc_calculated =
+		__archive_crc32(rar->crc_calculated, *buff, *size);
         return (ret);
       }
       continue;
@@ -1755,7 +1753,7 @@ read_data_compressed(struct archive_read *a, const void **buff, size_t *size,
   *offset = rar->offset_outgoing;
   rar->offset_outgoing += *size;
   /* Calculate File CRC. */
-  rar->crc_calculated = crc32(rar->crc_calculated, *buff, *size);
+  rar->crc_calculated = __archive_crc32(rar->crc_calculated, *buff, *size);
   return ret;
 }
 
@@ -1998,17 +1996,21 @@ parse_codes(struct archive_read *a)
     /* Seems as though dictionary sizes are not used. Even so, minimize
      * memory usage as much as possible.
      */
+    void *new_window;
+    unsigned int new_size;
+
     if (rar->unp_size >= DICTIONARY_MAX_SIZE)
-      rar->dictionary_size = DICTIONARY_MAX_SIZE;
+      new_size = DICTIONARY_MAX_SIZE;
     else
-      rar->dictionary_size = rar_fls((unsigned int)rar->unp_size) << 1;
-    rar->lzss.window = (unsigned char *)realloc(rar->lzss.window,
-                                                rar->dictionary_size);
-    if (rar->lzss.window == NULL) {
+      new_size = rar_fls((unsigned int)rar->unp_size) << 1;
+    new_window = realloc(rar->lzss.window, new_size);
+    if (new_window == NULL) {
       archive_set_error(&a->archive, ENOMEM,
                         "Unable to allocate memory for uncompressed data.");
       return (ARCHIVE_FATAL);
     }
+    rar->lzss.window = (unsigned char *)new_window;
+    rar->dictionary_size = new_size;
     memset(rar->lzss.window, 0, rar->dictionary_size);
     rar->lzss.mask = rar->dictionary_size - 1;
   }
@@ -2246,10 +2248,12 @@ add_value(struct archive_read *a, struct huffman_code *code, int value,
 static int
 new_node(struct huffman_code *code)
 {
-  code->tree = (struct huffman_tree_node *)realloc(code->tree,
-    (code->numentries + 1) * sizeof(*code->tree));
-  if (code->tree == NULL)
+  void *new_tree;
+
+  new_tree = realloc(code->tree, (code->numentries + 1) * sizeof(*code->tree));
+  if (new_tree == NULL)
     return (-1);
+  code->tree = (struct huffman_tree_node *)new_tree;
   code->tree[code->numentries].branches[0] = -1;
   code->tree[code->numentries].branches[1] = -2;
   return 1;
@@ -2264,7 +2268,7 @@ make_table(struct archive_read *a, struct huffman_code *code)
     code->tablesize = code->maxlength;
 
   code->table =
-    (struct huffman_table_entry *)malloc(sizeof(*code->table)
+    (struct huffman_table_entry *)calloc(1, sizeof(*code->table)
     * (1 << code->tablesize));
 
   return make_table_recurse(a, code, 0, code->table, 0, code->tablesize);
