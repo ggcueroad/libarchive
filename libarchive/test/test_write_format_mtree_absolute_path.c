@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2011 Michihiro NAKAJIMA
+ * Copyright (c) 2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,77 +26,45 @@
 
 #include "test.h"
 __FBSDID("$FreeBSD$");
-#ifdef HAVE_SYS_STAT_H
-#include <sys/stat.h>
-#endif
-
-/*
- * Test UFS file flags with/without use-set option.
- */
-#if defined(UF_IMMUTABLE) && defined(UF_NODUMP)
 
 static char buff[4096];
-static struct {
-	const char	*path;
-	unsigned long	 fflags;
-} entries[] = {
-	{ "./f1", 	UF_IMMUTABLE | UF_NODUMP },
-	{ "./f11", 	UF_IMMUTABLE | UF_NODUMP },
-	{ "./f2", 	0 },
-	{ "./f3", 	UF_NODUMP },
-	{ NULL, 0 }
-};
 
-static void
-test_write_format_mtree_sub(int use_set)
+DEFINE_TEST(test_write_format_mtree_absolute_path)
 {
 	struct archive_entry *ae;
 	struct archive* a;
 	size_t used;
-	int i;
 
 	/* Create a mtree format archive. */
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_mtree(a));
-	if (use_set)
-		assertEqualIntA(a, ARCHIVE_OK,
-		    archive_write_set_options(a, "use-set,!all,flags,type"));
-	else
-		assertEqualIntA(a, ARCHIVE_OK,
-		    archive_write_set_options(a, "!all,flags,type"));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_open_memory(a, buff, sizeof(buff)-1, &used));
 
-	/* Write entries */
-	for (i = 0; entries[i].path != NULL; i++) {
-		assert((ae = archive_entry_new()) != NULL);
-		archive_entry_set_fflags(ae, entries[i].fflags, 0);
-		archive_entry_copy_pathname(ae, entries[i].path);
-		archive_entry_set_size(ae, 0);
-		assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
-		archive_entry_free(ae);
-	}
+	/* Write "." file.  */
+	assert((ae = archive_entry_new()) != NULL);
+	archive_entry_copy_pathname(ae, ".");
+	archive_entry_set_mode(ae, AE_IFDIR | 0755);
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	archive_entry_free(ae);
+
+	/* Write "/file" file.  */
+	assert((ae = archive_entry_new()) != NULL);
+	archive_entry_copy_pathname(ae, "/file");
+	archive_entry_set_size(ae, 0);
+	archive_entry_set_mode(ae, AE_IFREG | 0644);
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	archive_entry_free(ae);
+
+	/* Write "/dir" directory.  */
+	assert((ae = archive_entry_new()) != NULL);
+	archive_entry_copy_pathname(ae, "/dir");
+	archive_entry_set_mode(ae, AE_IFDIR | 0755);
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
+	archive_entry_free(ae);
+
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
         assertEqualInt(ARCHIVE_OK, archive_write_free(a));
-
-	if (use_set) {
-		const char *p;
-
-		buff[used] = '\0';
-		assert(NULL != (p = strstr(buff, "\n/set ")));
-		if (p != NULL) {
-			char *r;
-			const char *o;
-			p++;
-			r = strchr(p, '\n');
-			if (r != NULL)
-				*r = '\0';
-			o = "/set type=file flags=uchg,nodump";
-			assertEqualString(o, p);
-			if (r != NULL)
-				*r = '\n';
-		}
-	}
 
 	/*
 	 * Read the data and check it.
@@ -106,30 +74,26 @@ test_write_format_mtree_sub(int use_set)
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_memory(a, buff, used));
 
-	/* Read entries */
-	for (i = 0; entries[i].path != NULL; i++) {
-		unsigned long fset, fclr;
+	/* Read "." file. */
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	failure("The path should be just \".\"");
+	assertEqualString(archive_entry_pathname(ae), ".");
+	assertEqualInt(archive_entry_mode(ae), AE_IFDIR | 0755);
 
-		assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-		archive_entry_fflags(ae, &fset, &fclr);
-		assertEqualInt((int)entries[i].fflags, (int)fset);
-		assertEqualInt(0, (int)fclr);
-		assertEqualString(entries[i].path, archive_entry_pathname(ae));
-	}
+	/* Read "/file" file. */
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	failure("The path should have \"./\" prefix");
+	assertEqualString(archive_entry_pathname(ae), "./file");
+	assertEqualInt(archive_entry_size(ae), 0);
+	assertEqualInt(archive_entry_mode(ae), AE_IFREG | 0644);
+
+	/* Read "/dir" file. */
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
+	failure("The path should have \"./\" prefix");
+	assertEqualString(archive_entry_pathname(ae), "./dir");
+	assertEqualInt(archive_entry_mode(ae), AE_IFDIR | 0755);
+
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 }
 
-#endif
-
-DEFINE_TEST(test_write_format_mtree_fflags)
-{
-#if defined(UF_IMMUTABLE) && defined(UF_NODUMP)
-	/* Default setting */
-	test_write_format_mtree_sub(0);
-	/* Use /set keyword */
-	test_write_format_mtree_sub(1);
-#else
-	skipping("This platform does not support UFS file flags");
-#endif
-}

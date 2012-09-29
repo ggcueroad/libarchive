@@ -69,6 +69,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_read_support_format_mtree.c 2011
 #define	MTREE_HAS_UNAME		0x0400
 
 #define	MTREE_HAS_OPTIONAL	0x0800
+#define	MTREE_HAS_NOCHANGE	0x1000 /* FreeBSD specific */
 
 struct mtree_option {
 	struct mtree_option *next;
@@ -369,7 +370,7 @@ bid_keyword(const char *p,  ssize_t len)
 		"md5", "md5digest", "mode", NULL
 	};
 	static const char *keys_no[] = {
-		"nlink", "optional", NULL
+		"nlink", "nochange", "optional", NULL
 	};
 	static const char *keys_r[] = {
 		"rmd160", "rmd160digest", NULL
@@ -510,7 +511,8 @@ bid_entry(const char *p, ssize_t len, ssize_t nl, int *last_is_path)
 	/*
 	 * Skip the path-name which is quoted.
 	 */
-	while (ll > 0 && *pp != ' ' && *pp != '\t') {
+	while (ll > 0 && *pp != ' ' &&*pp != '\t' && *pp != '\r' &&
+	    *pp != '\n') {
 		if (!safe_char[*(const unsigned char *)pp]) {
 			f = 0;
 			break;
@@ -525,6 +527,7 @@ bid_entry(const char *p, ssize_t len, ssize_t nl, int *last_is_path)
 	if (f == 0) {
 		const char *pb = p + len - nl;
 		int name_len = 0;
+		int slash;
 
 		/* Do not accept multi lines for form D. */
 		if (pb-2 >= p &&
@@ -533,12 +536,21 @@ bid_entry(const char *p, ssize_t len, ssize_t nl, int *last_is_path)
 		if (pb-1 >= p && pb[-1] == '\\')
 			return (-1);
 
+		slash = 0;
 		while (p <= --pb && *pb != ' ' && *pb != '\t') {
 			if (!safe_char[*(const unsigned char *)pb])
 				return (-1);
 			name_len++;
+			/* The pathname should have a slash in this
+			 * format. */
+			if (*pb == '/')
+				slash = 1;
 		}
-		if (name_len == 0)
+		if (name_len == 0 || slash == 0)
+			return (-1);
+		/* If '/' is placed at the first in this field, this is not
+		 * a valid filename. */
+		if (pb[1] == '/')
 			return (-1);
 		ll = len - nl - name_len;
 		pp = p;
@@ -1190,15 +1202,19 @@ parse_file(struct archive_read *a, struct archive_entry *entry,
 	 * if it wasn't already parsed from the specification.
 	 */
 	if (st != NULL) {
-		if ((parsed_kws & MTREE_HAS_DEVICE) == 0 &&
+		if (((parsed_kws & MTREE_HAS_DEVICE) == 0 ||
+		     (parsed_kws & MTREE_HAS_NOCHANGE) != 0) &&
 		    (archive_entry_filetype(entry) == AE_IFCHR ||
 		     archive_entry_filetype(entry) == AE_IFBLK))
 			archive_entry_set_rdev(entry, st->st_rdev);
-		if ((parsed_kws & (MTREE_HAS_GID | MTREE_HAS_GNAME)) == 0)
+		if ((parsed_kws & (MTREE_HAS_GID | MTREE_HAS_GNAME)) == 0 ||
+		    (parsed_kws & MTREE_HAS_NOCHANGE) != 0)
 			archive_entry_set_gid(entry, st->st_gid);
-		if ((parsed_kws & (MTREE_HAS_UID | MTREE_HAS_UNAME)) == 0)
+		if ((parsed_kws & (MTREE_HAS_UID | MTREE_HAS_UNAME)) == 0 ||
+		    (parsed_kws & MTREE_HAS_NOCHANGE) != 0)
 			archive_entry_set_uid(entry, st->st_uid);
-		if ((parsed_kws & MTREE_HAS_MTIME) == 0) {
+		if ((parsed_kws & MTREE_HAS_MTIME) == 0 ||
+		    (parsed_kws & MTREE_HAS_NOCHANGE) != 0) {
 #if HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC
 			archive_entry_set_mtime(entry, st->st_mtime,
 			    st->st_mtimespec.tv_nsec);
@@ -1218,11 +1234,14 @@ parse_file(struct archive_read *a, struct archive_entry *entry,
 			archive_entry_set_mtime(entry, st->st_mtime, 0);
 #endif
 		}
-		if ((parsed_kws & MTREE_HAS_NLINK) == 0)
+		if ((parsed_kws & MTREE_HAS_NLINK) == 0 ||
+		    (parsed_kws & MTREE_HAS_NOCHANGE) != 0)
 			archive_entry_set_nlink(entry, st->st_nlink);
-		if ((parsed_kws & MTREE_HAS_PERM) == 0)
+		if ((parsed_kws & MTREE_HAS_PERM) == 0 ||
+		    (parsed_kws & MTREE_HAS_NOCHANGE) != 0)
 			archive_entry_set_perm(entry, st->st_mode);
-		if ((parsed_kws & MTREE_HAS_SIZE) == 0)
+		if ((parsed_kws & MTREE_HAS_SIZE) == 0 ||
+		    (parsed_kws & MTREE_HAS_NOCHANGE) != 0)
 			archive_entry_set_size(entry, st->st_size);
 		archive_entry_set_ino(entry, st->st_ino);
 		archive_entry_set_dev(entry, st->st_dev);
@@ -1312,6 +1331,10 @@ parse_keyword(struct archive_read *a, struct mtree *mtree,
 	if (*key == '\0')
 		return (ARCHIVE_OK);
 
+	if (strcmp(key, "nochange") == 0) {
+		*parsed_kws |= MTREE_HAS_NOCHANGE;
+		return (ARCHIVE_OK);
+	}
 	if (strcmp(key, "optional") == 0) {
 		*parsed_kws |= MTREE_HAS_OPTIONAL;
 		return (ARCHIVE_OK);
