@@ -266,8 +266,8 @@ AS_VAR_IF([ac_cv_have_decl_EXT2_IOC_GETFLAGS], [yes],
 
 AC_CHECK_HEADERS([inttypes.h io.h langinfo.h limits.h])
 AC_CHECK_HEADERS([linux/fiemap.h linux/fs.h linux/magic.h linux/types.h])
-AC_CHECK_HEADERS([locale.h paths.h poll.h pwd.h regex.h signal.h stdarg.h])
-AC_CHECK_HEADERS([stdint.h stdlib.h string.h])
+AC_CHECK_HEADERS([locale.h paths.h poll.h pwd.h regex.h signal.h spawn.h])
+AC_CHECK_HEADERS([stdarg.h stdint.h stdlib.h string.h])
 AC_CHECK_HEADERS([sys/acl.h sys/cdefs.h sys/extattr.h sys/ioctl.h])
 AC_CHECK_HEADERS([sys/mkdev.h sys/mount.h])
 AC_CHECK_HEADERS([sys/param.h sys/poll.h sys/select.h sys/statfs.h sys/statvfs.h])
@@ -481,7 +481,7 @@ AC_FUNC_VPRINTF
 # To avoid necessity for including windows.h or special forward declaration
 # workarounds, we use 'void *' for 'struct SECURITY_ATTRIBUTES *'
 AC_CHECK_STDCALL_FUNC([CreateHardLinkA],[const char *, const char *, void *])
-AC_CHECK_FUNCS([chflags chown chroot ctime_r])
+AC_CHECK_FUNCS([chflags chown chroot ctime_r dirfd])
 AC_CHECK_FUNCS([fchdir fchflags fchmod fchown fcntl fdopendir fork])
 AC_CHECK_FUNCS([fstat fstatat fstatfs fstatvfs ftruncate])
 AC_CHECK_FUNCS([futimens futimes futimesat])
@@ -490,7 +490,7 @@ AC_CHECK_FUNCS([getpwnam_r getpwuid_r getvfsbyname gmtime_r])
 AC_CHECK_FUNCS([lchflags lchmod lchown link localtime_r lstat lutimes])
 AC_CHECK_FUNCS([mbrtowc memmove memset])
 AC_CHECK_FUNCS([mkdir mkfifo mknod mkstemp])
-AC_CHECK_FUNCS([nl_langinfo openat pipe poll readlink readlinkat])
+AC_CHECK_FUNCS([nl_langinfo openat pipe poll posix_spawnp readlink readlinkat])
 AC_CHECK_FUNCS([select setenv setlocale sigaction statfs statvfs])
 AC_CHECK_FUNCS([strchr strdup strerror strncpy_s strrchr symlink timegm])
 AC_CHECK_FUNCS([tzset unsetenv utime utimensat utimes vfork])

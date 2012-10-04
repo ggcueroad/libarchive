@@ -92,6 +92,7 @@ __FBSDID("$FreeBSD: src/usr.bin/tar/test/main.c,v 1.6 2008/11/05 06:40:53 kientz
  */
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #include <io.h>
+#include <direct.h>
 #include <windows.h>
 #ifndef F_OK
 #define F_OK (0)
@@ -1177,11 +1178,11 @@ assertion_file_time(const char *file, int line,
 
 #if defined(_WIN32) && !defined(__CYGWIN__)
 #define EPOC_TIME	(116444736000000000ULL)
-	FILETIME ftime, fbirthtime, fatime, fmtime;
+	FILETIME fxtime, fbirthtime, fatime, fmtime;
 	ULARGE_INTEGER wintm;
 	HANDLE h;
-	ftime.dwLowDateTime = 0;
-	ftime.dwHighDateTime = 0;
+	fxtime.dwLowDateTime = 0;
+	fxtime.dwHighDateTime = 0;
 
 	assertion_count(file, line);
 	/* Note: FILE_FLAG_BACKUP_SEMANTICS applies to open
@@ -1196,9 +1197,9 @@ assertion_file_time(const char *file, int line,
 	}
 	r = GetFileTime(h, &fbirthtime, &fatime, &fmtime);
 	switch (type) {
-	case 'a': ftime = fatime; break;
-	case 'b': ftime = fbirthtime; break;
-	case 'm': ftime = fmtime; break;
+	case 'a': fxtime = fatime; break;
+	case 'b': fxtime = fbirthtime; break;
+	case 'm': fxtime = fmtime; break;
 	}
 	CloseHandle(h);
 	if (r == 0) {
@@ -1206,8 +1207,8 @@ assertion_file_time(const char *file, int line,
 		failure_finish(NULL);
 		return (0);
 	}
-	wintm.LowPart = ftime.dwLowDateTime;
-	wintm.HighPart = ftime.dwHighDateTime;
+	wintm.LowPart = fxtime.dwLowDateTime;
+	wintm.HighPart = fxtime.dwHighDateTime;
 	filet = (wintm.QuadPart - EPOC_TIME) / 10000000;
 	filet_nsec = ((wintm.QuadPart - EPOC_TIME) % 10000000) * 100;
 	nsec = (nsec / 100) * 100; /* Round the request */
@@ -1835,15 +1836,30 @@ canSymlink(void)
 	return (value);
 }
 
-/*
- * Can this platform run the gzip program?
- */
 /* Platform-dependent options for hiding the output of a subcommand. */
 #if defined(_WIN32) && !defined(__CYGWIN__)
 static const char *redirectArgs = ">NUL 2>NUL"; /* Win32 cmd.exe */
 #else
 static const char *redirectArgs = ">/dev/null 2>/dev/null"; /* POSIX 'sh' */
 #endif
+/*
+ * Can this platform run the bunzip2 program?
+ */
+int
+canBunzip2(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("bunzip2 -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the gzip program?
+ */
 int
 canGzip(void)
 {
@@ -1866,6 +1882,81 @@ canGunzip(void)
 	if (!tested) {
 		tested = 1;
 		if (systemf("gunzip -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the lrzip program?
+ */
+int
+canLrzip(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("lrzip -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the lrunzip program?
+ */
+int
+canLrunzip(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("lrunzip -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the lunzip program?
+ */
+int
+canLunzip(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("lunzip -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the unlzma program?
+ */
+int
+canUnlzma(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("unlzma -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the unxz program?
+ */
+int
+canUnxz(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("unxz -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);

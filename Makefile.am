@@ -495,6 +495,12 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_fuzz.cab.uu				\
 	libarchive/test/test_fuzz.lzh.uu				\
 	libarchive/test/test_pax_filename_encoding.tar.uu		\
+	libarchive/test/test_rar_multivolume_multiple_files.part1.rar.uu \
+	libarchive/test/test_rar_multivolume_multiple_files.part2.rar.uu \
+	libarchive/test/test_rar_multivolume_multiple_files.part3.rar.uu \
+	libarchive/test/test_rar_multivolume_multiple_files.part4.rar.uu \
+	libarchive/test/test_rar_multivolume_multiple_files.part5.rar.uu \
+	libarchive/test/test_rar_multivolume_multiple_files.part6.rar.uu \
 	libarchive/test/test_rar_multivolume_single_file.part1.rar.uu	\
 	libarchive/test/test_rar_multivolume_single_file.part2.rar.uu	\
 	libarchive/test/test_rar_multivolume_single_file.part3.rar.uu	\
@@ -615,6 +621,9 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_splitted_rar_ab.uu			\
 	libarchive/test/test_read_splitted_rar_ac.uu			\
 	libarchive/test/test_read_splitted_rar_ad.uu			\
+	libarchive/test/test_splitted_rar_seek_support_aa.uu		\
+	libarchive/test/test_splitted_rar_seek_support_ab.uu		\
+	libarchive/test/test_splitted_rar_seek_support_ac.uu		\
 	libarchive/test/CMakeLists.txt					\
 	libarchive/test/README
 
@@ -693,6 +702,12 @@ bsdtar_test_SOURCES=						\
 	tar/test/test_basic.c					\
 	tar/test/test_copy.c					\
 	tar/test/test_empty_mtree.c				\
+	tar/test/test_extract_tar_bz2.c				\
+	tar/test/test_extract_tar_gz.c				\
+	tar/test/test_extract_tar_lrz.c				\
+	tar/test/test_extract_tar_lz.c				\
+	tar/test/test_extract_tar_lzma.c			\
+	tar/test/test_extract_tar_xz.c				\
 	tar/test/test_format_newc.c				\
 	tar/test/test_help.c					\
 	tar/test/test_option_C_upper.c				\
@@ -710,6 +725,7 @@ bsdtar_test_SOURCES=						\
 	tar/test/test_option_n.c				\
 	tar/test/test_option_newer_than.c			\
 	tar/test/test_option_nodump.c				\
+	tar/test/test_option_older_than.c			\
 	tar/test/test_option_q.c				\
 	tar/test/test_option_r.c				\
 	tar/test/test_option_s.c				\
