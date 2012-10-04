@@ -117,6 +117,9 @@ seek_file(int fd, int64_t offset, int whence)
 }
 #define	open _open
 #define	close _close
+#ifdef lseek
+#undef lseek
+#endif
 #define	lseek seek_file
 #endif
 
@@ -808,7 +811,7 @@ copy_file_data_block(struct bsdpax *bsdpax, struct archive *a,
 			}
 
 			while (sparse > 0) {
-				if (sparse > bsdpax->buff_size)
+				if (sparse > (int64_t)bsdpax->buff_size)
 					ns = bsdpax->buff_size;
 				else
 					ns = (size_t)sparse;

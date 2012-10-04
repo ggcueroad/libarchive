@@ -45,6 +45,12 @@
 #error Oops: No config.h and no pre-built configuration in test.h.
 #endif
 
+#if defined(_WIN32) && !defined(__CYGWIN__)
+#ifndef MINGW_HAS_SECURE_API
+#define MINGW_HAS_SECURE_API 1
+#endif
+#endif
+
 #include <sys/types.h>  /* Windows requires this before sys/stat.h */
 #include <sys/stat.h>
 
