@@ -24,7 +24,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd Feb 7, 2012
+.Dd October 8, 2012
 .Dt PAX 1
 .Os
 .Sh NAME
@@ -196,8 +196,13 @@ With this option, the target of the link will be archived instead.
 (Copy mode only)
 Create links from the target directory to the original files,
 instead of copying.
+.It Fl Fl lrzip
+(Write mode only)
+Compress the resulting archive with
+.Xr lrzip 1 .
 .It Fl Fl lzma
-(Write mode only) Compress the resulting archive with the original LZMA algorithm.
+(Write mode only)
+Compress the resulting archive with the original LZMA algorithm.
 Use of this option is discouraged and new archives should be created with
 .Fl Fl xz
 instead.
@@ -205,6 +210,10 @@ Note that, unlike other
 .Nm pax
 implementations, this implementation recognizes LZMA compression
 automatically when reading archives.
+.It Fl Fl lzop
+(Write mode only)
+Compress the resulting archive with
+.Xr lzop 1 .
 .It Fl n , Fl Fl fast-read
 (Read and List mode only)
 Extract or list only the first archive entry that matches each pattern

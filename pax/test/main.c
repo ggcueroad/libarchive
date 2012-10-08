@@ -1903,21 +1903,6 @@ canLrzip(void)
 }
 
 /*
- * Can this platform run the lrunzip program?
- */
-int
-canLrunzip(void)
-{
-	static int tested = 0, value = 0;
-	if (!tested) {
-		tested = 1;
-		if (systemf("lrunzip -V %s", redirectArgs) == 0)
-			value = 1;
-	}
-	return (value);
-}
-
-/*
  * Can this platform run the lunzip program?
  */
 int
@@ -1942,6 +1927,21 @@ canUnlzma(void)
 	if (!tested) {
 		tested = 1;
 		if (systemf("unlzma -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the lzop program?
+ */
+int
+canLzop(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("lzop -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);

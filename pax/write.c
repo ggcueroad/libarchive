@@ -161,11 +161,17 @@ pax_mode_write(struct bsdpax *bsdpax)
 		case 'J':
 			r = archive_write_add_filter_xz(a);
 			break;
+		case OPTION_LRZIP:
+			r = archive_write_add_filter_lrzip(a);
+			break;
 		case OPTION_LZIP:
 			r = archive_write_add_filter_lzip(a);
 			break;
 		case OPTION_LZMA:
 			r = archive_write_add_filter_lzma(a);
+			break;
+		case OPTION_LZOP:
+			r = archive_write_add_filter_lzop(a);
 			break;
 		case 'z':
 			r = archive_write_add_filter_gzip(a);
@@ -175,24 +181,57 @@ pax_mode_write(struct bsdpax *bsdpax)
 			break;
 		default:
 			lafe_errc(1, 0,
-			    "Unrecognized compression option -%c",
+			    "Unrecognized filter option -%c",
 			    bsdpax->create_compression);
 		}
-		if (r != ARCHIVE_OK) {
+		if (r < ARCHIVE_WARN) {
 			const char *zname;
 			switch (bsdpax->create_compression) {
+			case OPTION_LRZIP: zname = "lrzip"; break;
 			case OPTION_LZIP: zname = "lzip"; break;
 			case OPTION_LZMA: zname = "lzma"; break;
+			case OPTION_LZOP: zname = "lzop"; break;
 			case OPTION_COMPRESS: zname = "compress"; break;
 			default: zname = NULL; break;
 			}
 			if (zname == NULL)
 				lafe_errc(1, 0,
-				    "Unsupported compression option -%c",
+				    "Unsupported filter option -%c",
 				    bsdpax->create_compression);
 			else
 				lafe_errc(1, 0,
-				    "Unsupported compression option --%s",
+				    "Unsupported filter option --%s",
+				    zname);
+		}
+		switch (bsdpax->add_filter) {
+		case 0:
+			r = ARCHIVE_OK;
+			break;
+		case OPTION_B64ENCODE:
+			r = archive_write_add_filter_b64encode(a);
+			break;
+		case OPTION_UUENCODE:
+			r = archive_write_add_filter_uuencode(a);
+			break;
+		default:
+			lafe_errc(1, 0,
+			    "Unrecognized filter option -%c",
+			    bsdpax->create_compression);
+		}
+		if (r < ARCHIVE_WARN) {
+			const char *zname;
+			switch (bsdpax->create_compression) {
+			case OPTION_B64ENCODE: zname = "b64encode"; break;
+			case OPTION_UUENCODE: zname = "uuencode"; break;
+			default: zname = NULL; break;
+			}
+			if (zname == NULL)
+				lafe_errc(1, 0,
+				    "Unsupported filter option -%c",
+				    bsdpax->create_compression);
+			else
+				lafe_errc(1, 0,
+				    "Unsupported filter option --%s",
 				    zname);
 		}
 	}
@@ -203,7 +242,7 @@ pax_mode_write(struct bsdpax *bsdpax)
 			lafe_errc(1, 0, "Out of memory");
 	}
 	bsdpax_set_options(bsdpax->options, archive_write_set_options, a);
-	if (ARCHIVE_OK != archive_write_open_file(a, bsdpax->filename))
+	if (ARCHIVE_OK != archive_write_open_filename(a, bsdpax->filename))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 	write_archive(a, bsdpax);
 	if (bsdpax->matching2 != NULL) {
@@ -249,7 +288,7 @@ pax_mode_append(struct bsdpax *bsdpax)
 	}
 	/* Build a list of all entries and their recorded mod times. */
 	while (0 == archive_read_next_header(a, &entry)) {
-		if (archive_compression(a) != ARCHIVE_COMPRESSION_NONE) {
+		if (archive_filter_code(a, 0) != ARCHIVE_COMPRESSION_NONE) {
 			archive_read_free(a);
 			close(bsdpax->fd);
 			lafe_errc(1, 0,
@@ -480,7 +519,8 @@ append_archive_filename(struct bsdpax *bsdpax, struct archive *a,
 	ina = archive_read_new();
 	archive_read_support_format_all(ina);
 	archive_read_support_filter_all(ina);
-	if (archive_read_open_file(ina, filename, bsdpax->bytes_per_block)) {
+	if (archive_read_open_filename(ina, filename,
+					bsdpax->bytes_per_block)) {
 		lafe_warnc(0, "%s", archive_error_string(ina));
 		bsdpax->return_value = 1;
 		return (0);
@@ -764,8 +804,8 @@ report_write(struct bsdpax *bsdpax, struct archive *a,
 
 	if (bsdpax->verbose)
 		fprintf(stderr, "\n");
-	comp = archive_position_compressed(a);
-	uncomp = archive_position_uncompressed(a);
+	comp = archive_filter_bytes(a, -1);
+	uncomp = archive_filter_bytes(a, 0);
 	fprintf(stderr, "In: %d files, %s bytes;",
 	    archive_file_count(a), pax_i64toa(uncomp));
 	if (comp > uncomp)

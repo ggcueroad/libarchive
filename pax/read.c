@@ -125,8 +125,8 @@ progress_func(void *cookie)
 	if (bsdpax->verbose)
 		fprintf(stderr, "\n");
 	if (a != NULL) {
-		comp = archive_position_compressed(a);
-		uncomp = archive_position_uncompressed(a);
+		comp = archive_filter_bytes(a, -1);
+		uncomp = archive_filter_bytes(a, 0);
 		if (comp > uncomp)
 			compression = 0;
 		else
@@ -179,7 +179,8 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 		archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 	bsdpax_set_options(bsdpax->options, archive_read_set_options, a);
-	if (archive_read_open_file(a, bsdpax->filename, bsdpax->bytes_per_block))
+	if (archive_read_open_filename(a, bsdpax->filename,
+					bsdpax->bytes_per_block))
 		lafe_errc(1, 0, "Error opening archive: %s",
 		    archive_error_string(a));
 

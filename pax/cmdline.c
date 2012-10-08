@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2003-2007 Tim Kientzle
+ * Copyright (c) 2010-2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,6 +63,7 @@ static const struct bsdpax_option {
 	int equivalent;	/* Equivalent short option. */
 } bsdpax_longopts[] = {
 	{ "append",			0, 'a' },
+	{ "b64encode",			0, OPTION_B64ENCODE },
 	{ "block-size",			1, 'b' },
 	{ "bunzip2",			0, 'j' },
 	{ "bzip",			0, 'j' },
@@ -87,8 +89,10 @@ static const struct bsdpax_option {
 	{ "keep-newer-mtime-files2",	0, 'Z' },
 	{ "keep-old-files",		0, 'k' },
 	{ "link",			0, 'l' },
+	{ "lrzip",			0, OPTION_LRZIP },
 	{ "lzip",			0, OPTION_LZIP },
 	{ "lzma",			0, OPTION_LZMA },
+	{ "lzop",			0, OPTION_LZOP },
 	{ "no-recursion",		0, 'd' },
 	{ "nodump",			0, OPTION_NODUMP },
 	{ "norecurse",			0, 'd' },
@@ -98,6 +102,7 @@ static const struct bsdpax_option {
 	{ "strip-components",		1, OPTION_STRIP_COMPONENTS },
 	{ "uncompress",			0, OPTION_COMPRESS },
 	{ "use-compress-program",	1, OPTION_USE_COMPRESS_PROGRAM },
+	{ "uuencode",			0, OPTION_UUENCODE },
 	{ "verbose",			0, 'v' },
 	{ "version",			0, OPTION_VERSION },
 	{ "xz",				0, 'J' },

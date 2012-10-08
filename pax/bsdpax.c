@@ -248,6 +248,13 @@ main(int argc, char **argv)
 			/* Explicit -b forces last block size. */
 			bsdpax->bytes_in_last_block = bsdpax->bytes_per_block;
 			break;
+		case OPTION_B64ENCODE:
+			if (bsdpax->add_filter != '\0')
+				lafe_errc(1, 0,
+				    "Cant't specify both --uuencode and "
+				    "--b64encode");
+			bsdpax->add_filter = opt;
+			break;
 		case OPTION_COMPRESS:
 			if (bsdpax->create_compression != '\0')
 				compression_conflict_error(bsdpax, opt);
@@ -289,8 +296,10 @@ main(int argc, char **argv)
 			break;
 		case 'j':
 		case 'J':
+		case OPTION_LRZIP:
 		case OPTION_LZIP:
 		case OPTION_LZMA:
+		case OPTION_LZOP:
 			if (bsdpax->create_compression != '\0')
 				compression_conflict_error(bsdpax, opt);
 			bsdpax->create_compression = opt;
@@ -402,6 +411,13 @@ main(int argc, char **argv)
 			if (add_user(bsdpax, bsdpax->argument) < 0)
 				lafe_errc(1, 0,
 				    "Argument to -U # must be positive");
+			break;
+		case OPTION_UUENCODE:
+			if (bsdpax->add_filter != '\0')
+				lafe_errc(1, 0,
+				    "Cant't specify both --uuencode and "
+				    "--b64encode");
+			bsdpax->add_filter = opt;
 			break;
 		case 'v':
 			bsdpax->verbose++;
@@ -545,12 +561,20 @@ compression_name(char *name, size_t name_size, int compression)
 		strncpy(name, "--compress", name_size-1);
 		name[name_size-1] = '\0';
 		break;
+	case OPTION_LRZIP:
+		strncpy(name, "--lrzip", name_size-1);
+		name[name_size-1] = '\0';
+		break;
 	case OPTION_LZIP:
 		strncpy(name, "--lzip", name_size-1);
 		name[name_size-1] = '\0';
 		break;
 	case OPTION_LZMA:
 		strncpy(name, "--lzma", name_size-1);
+		name[name_size-1] = '\0';
+		break;
+	case OPTION_LZOP:
+		strncpy(name, "--lzop", name_size-1);
 		name[name_size-1] = '\0';
 		break;
 	case 'j':

@@ -63,6 +63,7 @@ struct bsdpax {
 	char		  symlink_mode; /* H or L, per BSD conventions */
 	char		  create_compression; /* J, j, y, or z */
 	const char	 *compress_program;
+	char		  add_filter; /* uuencode */
 	char		  option_absolute_paths; /* -P */
 	char		  option_chroot; /* --chroot */
 	char		  option_dont_traverse_mounts; /* --one-file-system */
@@ -127,16 +128,20 @@ struct bsdpax {
 
 /* Fake short equivalents for long options that otherwise lack them. */
 enum {
-	OPTION_COMPRESS = 1,
+	OPTION_B64ENCODE = 1,
+	OPTION_COMPRESS,
 	OPTION_DISABLE_COPYFILE,
 	OPTION_HELP,
 	OPTION_INSECURE,
+	OPTION_LRZIP,
 	OPTION_LZIP,
 	OPTION_LZMA,
+	OPTION_LZOP,
 	OPTION_NODUMP,
 	OPTION_NULL,
 	OPTION_STRIP_COMPONENTS,
 	OPTION_USE_COMPRESS_PROGRAM,
+	OPTION_UUENCODE,
 	OPTION_VERSION
 };
 
