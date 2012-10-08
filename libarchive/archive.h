@@ -97,6 +97,12 @@
 #define	__LA_PRINTF(fmtarg, firstvararg)	/* nothing */
 #endif
 
+#if defined(__GNUC__) && __GNUC__ >= 3 && __GNUC_MINOR__ >= 1
+# define __LA_DEPRECATED __attribute__((deprecated))
+#else
+# define __LA_DEPRECATED
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -215,6 +221,7 @@ typedef int archive_switch_callback(struct archive *, void *_client_data1,
 #define	ARCHIVE_FILTER_RPM	8
 #define	ARCHIVE_FILTER_LZIP	9
 #define	ARCHIVE_FILTER_LRZIP	10
+#define	ARCHIVE_FILTER_LZOP	11
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
 #define	ARCHIVE_COMPRESSION_NONE	ARCHIVE_FILTER_NONE
@@ -325,12 +332,26 @@ __LA_DECL int archive_read_support_filter_gzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lrzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzma(struct archive *);
+__LA_DECL int archive_read_support_filter_lzop(struct archive *);
 __LA_DECL int archive_read_support_filter_none(struct archive *);
 __LA_DECL int archive_read_support_filter_program(struct archive *,
 		     const char *command);
+__LA_DECL int archive_read_support_filter_programl(struct archive *,
+		     const char *command, const char *arg,
+		     .../* (char *)0 */);
+__LA_DECL int archive_read_support_filter_programv(struct archive *,
+		     const char *command, char * const argv[]);
 __LA_DECL int archive_read_support_filter_program_signature
-		(struct archive *, const char *,
+		(struct archive *, const char * /* cmd */,
 				    const void * /* match */, size_t);
+__LA_DECL int archive_read_support_filter_programl_signature
+		(struct archive *, const char * /* cmd */,
+		 const char * /* arg */,
+		 .../* , (char *)0, const void *, size_t */);
+__LA_DECL int archive_read_support_filter_programv_signature
+		(struct archive *, const char * /* cmd */,
+		 char * const [] /* argv */,
+		 const void * /* match */, size_t);
 
 __LA_DECL int archive_read_support_filter_rpm(struct archive *);
 __LA_DECL int archive_read_support_filter_uu(struct archive *);
@@ -408,7 +429,7 @@ __LA_DECL int archive_read_open_filename_w(struct archive *,
 		     const wchar_t *_filename, size_t _block_size);
 /* archive_read_open_file() is a deprecated synonym for ..._open_filename(). */
 __LA_DECL int archive_read_open_file(struct archive *,
-		     const char *_filename, size_t _block_size);
+		     const char *_filename, size_t _block_size) __LA_DEPRECATED;
 /* Read an archive that's stored in memory. */
 __LA_DECL int archive_read_open_memory(struct archive *,
 		     void * buff, size_t size);
@@ -592,15 +613,22 @@ __LA_DECL int archive_write_set_compression_xz(struct archive *);
 
 /* A convenience function to set the filter based on the code. */
 __LA_DECL int archive_write_add_filter(struct archive *, int filter_code);
+__LA_DECL int archive_write_add_filter_b64encode(struct archive *);
 __LA_DECL int archive_write_add_filter_bzip2(struct archive *);
 __LA_DECL int archive_write_add_filter_compress(struct archive *);
 __LA_DECL int archive_write_add_filter_gzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lrzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lzma(struct archive *);
+__LA_DECL int archive_write_add_filter_lzop(struct archive *);
 __LA_DECL int archive_write_add_filter_none(struct archive *);
 __LA_DECL int archive_write_add_filter_program(struct archive *,
 		     const char *cmd);
+__LA_DECL int archive_write_add_filter_programl(struct archive *,
+		     const char *cmd, const char *arg, .../*, (char *)0 */);
+__LA_DECL int archive_write_add_filter_programv(struct archive *,
+		     const char *cmd, char * const argv[]);
+__LA_DECL int archive_write_add_filter_uuencode(struct archive *);
 __LA_DECL int archive_write_add_filter_xz(struct archive *);
 
 
@@ -636,7 +664,8 @@ __LA_DECL int archive_write_open_filename(struct archive *, const char *_file);
 __LA_DECL int archive_write_open_filename_w(struct archive *,
 		     const wchar_t *_file);
 /* A deprecated synonym for archive_write_open_filename() */
-__LA_DECL int archive_write_open_file(struct archive *, const char *_file);
+__LA_DECL int archive_write_open_file(struct archive *, const char *_file)
+		__LA_DEPRECATED;
 __LA_DECL int archive_write_open_FILE(struct archive *, FILE *);
 /* _buffSize is the size of the buffer, _used refers to a variable that
  * will be updated after each write into the buffer. */
@@ -846,13 +875,17 @@ __LA_DECL const char *	 archive_filter_name(struct archive *, int);
 /* These don't properly handle multiple filters, so are deprecated and
  * will eventually be removed. */
 /* As of libarchive 3.0, this is an alias for archive_filter_bytes(a, -1); */
-__LA_DECL __LA_INT64_T	 archive_position_compressed(struct archive *);
+__LA_DECL __LA_INT64_T	 archive_position_compressed(struct archive *)
+				__LA_DEPRECATED;
 /* As of libarchive 3.0, this is an alias for archive_filter_bytes(a, 0); */
-__LA_DECL __LA_INT64_T	 archive_position_uncompressed(struct archive *);
+__LA_DECL __LA_INT64_T	 archive_position_uncompressed(struct archive *)
+				__LA_DEPRECATED;
 /* As of libarchive 3.0, this is an alias for archive_filter_name(a, 0); */
-__LA_DECL const char	*archive_compression_name(struct archive *);
+__LA_DECL const char	*archive_compression_name(struct archive *)
+				__LA_DEPRECATED;
 /* As of libarchive 3.0, this is an alias for archive_filter_code(a, 0); */
-__LA_DECL int		 archive_compression(struct archive *);
+__LA_DECL int		 archive_compression(struct archive *)
+				__LA_DEPRECATED;
 #endif
 
 __LA_DECL int		 archive_errno(struct archive *);

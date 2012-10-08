@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2007 Tim Kientzle
+ * Copyright (c) 2007-2009 Tim Kientzle
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,15 +25,14 @@
  */
 
 #include "test.h"
-__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_compress_bzip2.c 191183 2009-04-17 01:06:31Z kientzle $");
+__FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_compress_lzma.c 191183 2009-04-17 01:06:31Z kientzle $");
 
 /*
- * A basic exercise of bzip2 reading and writing.
+ * A basic exercise of lzma reading and writing.
  *
- * TODO: Add a reference file and make sure we can decompress that.
  */
 
-DEFINE_TEST(test_write_compress_bzip2)
+DEFINE_TEST(test_write_filter_lzma)
 {
 	struct archive_entry *ae;
 	struct archive* a;
@@ -55,23 +54,24 @@ DEFINE_TEST(test_write_compress_bzip2)
 	 */
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	r = archive_write_set_compression_bzip2(a);
+	r = archive_write_add_filter_lzma(a);
 	if (r == ARCHIVE_FATAL) {
-		skipping("bzip2 writing not supported on this platform");
+		skipping("lzma writing not supported on this platform");
 		assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 		return;
 	}
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_bytes_per_block(a, 10));
-	assertEqualInt(ARCHIVE_COMPRESSION_BZIP2, archive_compression(a));
-	assertEqualString("bzip2", archive_compression_name(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used1));
-	assertEqualInt(ARCHIVE_COMPRESSION_BZIP2, archive_compression(a));
-	assertEqualString("bzip2", archive_compression_name(a));
+	assertEqualInt(ARCHIVE_COMPRESSION_LZMA, archive_filter_code(a, 0));
+	assertEqualString("lzma", archive_filter_name(a, 0));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_write_open_memory(a, buff, buffsize, &used1));
+	assertEqualInt(ARCHIVE_COMPRESSION_LZMA, archive_filter_code(a, 0));
+	assertEqualString("lzma", archive_filter_name(a, 0));
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_set_filetype(ae, AE_IFREG);
 	archive_entry_set_size(ae, datasize);
-	for (i = 0; i < 999; i++) {
+	for (i = 0; i < 100; i++) {
 		sprintf(path, "file%03d", i);
 		archive_entry_copy_pathname(ae, path);
 		assertEqualIntA(a, ARCHIVE_OK, archive_write_header(a, ae));
@@ -84,16 +84,25 @@ DEFINE_TEST(test_write_compress_bzip2)
 
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_memory(a, buff, used1));
-	for (i = 0; i < 999; i++) {
-		sprintf(path, "file%03d", i);
-		if (!assertEqualInt(0, archive_read_next_header(a, &ae)))
-			break;
-		assertEqualString(path, archive_entry_pathname(ae));
-		assertEqualInt((int)datasize, archive_entry_size(ae));
+	r = archive_read_support_filter_lzma(a);
+	if (r == ARCHIVE_WARN) {
+		skipping("Can't verify lzma writing by reading back;"
+		    " lzma reading not fully supported on this platform");
+	} else {
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_read_support_filter_all(a));
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_read_open_memory(a, buff, used1));
+		for (i = 0; i < 100; i++) {
+			sprintf(path, "file%03d", i);
+			if (!assertEqualInt(ARCHIVE_OK,
+				archive_read_next_header(a, &ae)))
+				break;
+			assertEqualString(path, archive_entry_pathname(ae));
+			assertEqualInt((int)datasize, archive_entry_size(ae));
+		}
+		assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	}
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 
 	/*
@@ -104,7 +113,7 @@ DEFINE_TEST(test_write_compress_bzip2)
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_bytes_per_block(a, 10));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_bzip2(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_lzma(a));
 	assertEqualIntA(a, ARCHIVE_FAILED,
 	    archive_write_set_filter_option(a, NULL, "nonexistent-option", "0"));
 	assertEqualIntA(a, ARCHIVE_FAILED,
@@ -114,7 +123,7 @@ DEFINE_TEST(test_write_compress_bzip2)
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_filter_option(a, NULL, "compression-level", "9"));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used2));
-	for (i = 0; i < 999; i++) {
+	for (i = 0; i < 100; i++) {
 		sprintf(path, "file%03d", i);
 		assert((ae = archive_entry_new()) != NULL);
 		archive_entry_copy_pathname(ae, path);
@@ -127,26 +136,28 @@ DEFINE_TEST(test_write_compress_bzip2)
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
-	/* Curiously, this test fails; the test data above compresses
-	 * better at default compression than at level 9. */
-	/*
-	failure("compression-level=9 wrote %d bytes, default wrote %d bytes",
-	    (int)used2, (int)used1);
-	assert(used2 < used1);
-	*/
 
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_memory(a, buff, used2));
-	for (i = 0; i < 999; i++) {
-		sprintf(path, "file%03d", i);
-		if (!assertEqualInt(0, archive_read_next_header(a, &ae)))
-			break;
-		assertEqualString(path, archive_entry_pathname(ae));
-		assertEqualInt((int)datasize, archive_entry_size(ae));
+	r = archive_read_support_filter_lzma(a);
+	if (r == ARCHIVE_WARN) {
+		skipping("lzma reading not fully supported on this platform");
+	} else {
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_read_support_filter_all(a));
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_read_open_memory(a, buff, used2));
+		for (i = 0; i < 100; i++) {
+			sprintf(path, "file%03d", i);
+			failure("Trying to read %s", path);
+			if (!assertEqualIntA(a, ARCHIVE_OK,
+				archive_read_next_header(a, &ae)))
+				break;
+			assertEqualString(path, archive_entry_pathname(ae));
+			assertEqualInt((int)datasize, archive_entry_size(ae));
+		}
+		assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	}
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 
 	/*
@@ -156,11 +167,11 @@ DEFINE_TEST(test_write_compress_bzip2)
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_bytes_per_block(a, 10));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_bzip2(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_lzma(a));
 	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_write_set_filter_option(a, NULL, "compression-level", "1"));
+	    archive_write_set_filter_option(a, NULL, "compression-level", "0"));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used2));
-	for (i = 0; i < 999; i++) {
+	for (i = 0; i < 100; i++) {
 		sprintf(path, "file%03d", i);
 		assert((ae = archive_entry_new()) != NULL);
 		archive_entry_copy_pathname(ae, path);
@@ -175,23 +186,35 @@ DEFINE_TEST(test_write_compress_bzip2)
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
-	/* Level 0 really does result in larger data. */
+	/* It would be nice to assert that compression-level=0 produced
+	 * consistently larger/smaller results than the default compression,
+	 * but the results here vary a lot depending on the version of liblzma
+	 * being used. */
+	/* 
 	failure("Compression-level=0 wrote %d bytes; default wrote %d bytes",
 	    (int)used2, (int)used1);
 	assert(used2 > used1);
+	*/
 
 	assert((a = archive_read_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_filter_all(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_memory(a, buff, used2));
-	for (i = 0; i < 999; i++) {
-		sprintf(path, "file%03d", i);
-		if (!assertEqualInt(0, archive_read_next_header(a, &ae)))
-			break;
-		assertEqualString(path, archive_entry_pathname(ae));
-		assertEqualInt((int)datasize, archive_entry_size(ae));
+	r = archive_read_support_filter_lzma(a);
+	if (r == ARCHIVE_WARN) {
+		skipping("lzma reading not fully supported on this platform");
+	} else {
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_read_open_memory(a, buff, used2));
+		for (i = 0; i < 100; i++) {
+			sprintf(path, "file%03d", i);
+			if (!assertEqualInt(ARCHIVE_OK,
+				archive_read_next_header(a, &ae)))
+				break;
+			assertEqualString(path, archive_entry_pathname(ae));
+			assertEqualInt((int)datasize, archive_entry_size(ae));
+		}
+		assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	}
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 
 	/*
@@ -199,23 +222,23 @@ DEFINE_TEST(test_write_compress_bzip2)
 	 * don't crash or leak memory.
 	 */
 	assert((a = archive_write_new()) != NULL);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_bzip2(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_lzma(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
 	assert((a = archive_write_new()) != NULL);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_bzip2(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_lzma(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_bzip2(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_lzma(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_bzip2(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_lzma(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used2));
 	assertEqualInt(ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));

@@ -33,7 +33,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_compress_xz.c 191183 200
  * TODO: Add a reference file and make sure we can decompress that.
  */
 
-DEFINE_TEST(test_write_compress_xz)
+DEFINE_TEST(test_write_filter_xz)
 {
 	struct archive_entry *ae;
 	struct archive* a;
@@ -55,7 +55,7 @@ DEFINE_TEST(test_write_compress_xz)
 	 */
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	r = archive_write_set_compression_xz(a);
+	r = archive_write_add_filter_xz(a);
 	if (r == ARCHIVE_FATAL) {
 		skipping("xz writing not supported on this platform");
 		assertEqualInt(ARCHIVE_OK, archive_write_free(a));
@@ -63,11 +63,11 @@ DEFINE_TEST(test_write_compress_xz)
 	}
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_bytes_per_block(a, 10));
-	assertEqualInt(ARCHIVE_COMPRESSION_XZ, archive_compression(a));
-	assertEqualString("xz", archive_compression_name(a));
+	assertEqualInt(ARCHIVE_COMPRESSION_XZ, archive_filter_code(a, 0));
+	assertEqualString("xz", archive_filter_name(a, 0));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used1));
-	assertEqualInt(ARCHIVE_COMPRESSION_XZ, archive_compression(a));
-	assertEqualString("xz", archive_compression_name(a));
+	assertEqualInt(ARCHIVE_COMPRESSION_XZ, archive_filter_code(a, 0));
+	assertEqualString("xz", archive_filter_name(a, 0));
 	assert((ae = archive_entry_new()) != NULL);
 	archive_entry_set_filetype(ae, AE_IFREG);
 	archive_entry_set_size(ae, datasize);
@@ -113,7 +113,7 @@ DEFINE_TEST(test_write_compress_xz)
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_bytes_per_block(a, 10));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_xz(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_xz(a));
 	assertEqualIntA(a, ARCHIVE_FAILED,
 	    archive_write_set_filter_option(a, NULL, "nonexistent-option", "0"));
 	assertEqualIntA(a, ARCHIVE_FAILED,
@@ -174,7 +174,7 @@ DEFINE_TEST(test_write_compress_xz)
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_bytes_per_block(a, 10));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_xz(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_xz(a));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_filter_option(a, NULL, "compression-level", "0"));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used2));
@@ -228,23 +228,23 @@ DEFINE_TEST(test_write_compress_xz)
 	 * don't crash or leak memory.
 	 */
 	assert((a = archive_write_new()) != NULL);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_xz(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_xz(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
 	assert((a = archive_write_new()) != NULL);
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_xz(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_xz(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_xz(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_xz(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));
 
 	assert((a = archive_write_new()) != NULL);
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_format_ustar(a));
-	assertEqualIntA(a, ARCHIVE_OK, archive_write_set_compression_xz(a));
+	assertEqualIntA(a, ARCHIVE_OK, archive_write_add_filter_xz(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_write_open_memory(a, buff, buffsize, &used2));
 	assertEqualInt(ARCHIVE_OK, archive_write_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_write_free(a));

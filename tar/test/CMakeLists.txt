@@ -12,11 +12,13 @@ IF(ENABLE_TAR AND ENABLE_TEST)
     test_basic.c
     test_copy.c
     test_empty_mtree.c
+    test_extract_tar_Z.c
     test_extract_tar_bz2.c
     test_extract_tar_gz.c
     test_extract_tar_lrz.c
     test_extract_tar_lz.c
     test_extract_tar_lzma.c
+    test_extract_tar_lzo.c
     test_extract_tar_xz.c
     test_format_newc.c
     test_help.c
@@ -28,10 +30,14 @@ IF(ENABLE_TAR AND ENABLE_TEST)
     test_option_U_upper.c
     test_option_X_upper.c
     test_option_b.c
+    test_option_b64encode.c
     test_option_exclude.c
     test_option_gid_gname.c
     test_option_k.c
     test_option_keep_newer_files.c
+    test_option_lrzip.c
+    test_option_lzma.c
+    test_option_lzop.c
     test_option_n.c
     test_option_newer_than.c
     test_option_nodump.c
@@ -40,6 +46,8 @@ IF(ENABLE_TAR AND ENABLE_TEST)
     test_option_r.c
     test_option_s.c
     test_option_uid_uname.c
+    test_option_uuencode.c
+    test_option_xz.c
     test_patterns.c
     test_print_longpath.c
     test_stdio.c

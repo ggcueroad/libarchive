@@ -25,26 +25,18 @@
 
 #include "archive_platform.h"
 
-__FBSDID("$FreeBSD: head/lib/libarchive/archive_write_set_compression_lrzip.c 201081 2009-12-28 02:04:42Z kientzle $");
-
-#ifdef HAVE_ERRNO_H
-#include <errno.h>
-#endif
-#ifdef HAVE_STDLIB_H
-#include <stdlib.h>
-#endif
-#ifdef HAVE_STRING_H
-#include <string.h>
-#endif
-#include <time.h>
+__FBSDID("$FreeBSD$");
 
 #include "archive.h"
-#include "archive_private.h"
-#include "archive_write_private.h"
-
 
 int
 archive_write_add_filter_lrzip(struct archive *a)
 {
-	return archive_write_add_filter_program(a, "lrzip");
+	int r;
+	r = archive_write_add_filter_programl(a, "lrzip", "lrzip",
+		   "-q", NULL);
+	if (r == ARCHIVE_OK)
+		/* This filter always uses an external program. */
+		r = ARCHIVE_WARN;
+	return (r);
 }

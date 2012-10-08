@@ -33,7 +33,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/test/test_write_compress.c 189308 2009-0
  * TODO: Add a reference file and make sure we can decompress that.
  */
 
-DEFINE_TEST(test_write_compress)
+DEFINE_TEST(test_write_filter_compress)
 {
 	struct archive_entry *ae;
 	struct archive* a;
@@ -54,7 +54,7 @@ DEFINE_TEST(test_write_compress)
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_set_format_ustar(a));
 	assertEqualIntA(a, ARCHIVE_OK,
-	    archive_write_set_compression_compress(a));
+	    archive_write_add_filter_compress(a));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_write_open_memory(a, buff, buffsize, &used));
 

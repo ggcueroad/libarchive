@@ -24,35 +24,33 @@
  */
 #include "test.h"
 
-static void
-verify(const char *name)
+DEFINE_TEST(test_read_filter_lrzip)
 {
+	const char *name = "test_compat_lrzip.tar.lrz";
 	/* lrzip tracks directories as files, ensure that we list everything */
-	const char *n[] = { "d1/", "d1/f1", "d1/f2", "d1/f3", "f1", "f2", "f3", NULL };
+	const char *n[] = {
+		"d1/", "d1/f1", "d1/f2", "d1/f3", "f1", "f2", "f3", NULL };
 	struct archive_entry *ae;
 	struct archive *a;
-	int i, r;
+	int i;
 
-	assert((a = archive_read_new()) != NULL);
-	r = archive_read_support_filter_lrzip(a);
-	if (r == ARCHIVE_WARN) {
-		skipping("lrzip reading not fully supported on this platform");
-		assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+	if (!canLrzip()) {
+		skipping("lrzip command-line program not found");
 		return;
 	}
-	assertEqualIntA(a, ARCHIVE_OK, r);
+
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_WARN, archive_read_support_filter_lrzip(a));
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_support_format_all(a));
 	extract_reference_file(name);
-	assertEqualIntA(a, ARCHIVE_OK, archive_read_open_filename(a, name, 200));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_open_filename(a, name, 200));
 
 	/* Read entries, match up names with list above. */
 	for (i = 0; i < 7; ++i) {
 		failure("Could not read file %d (%s) from %s", i, n[i], name);
-		assertEqualIntA(a, ARCHIVE_OK, archive_read_next_header(a, &ae));
-		if (r != ARCHIVE_OK) {
-			archive_read_free(a);
-			return;
-		}
+		assertEqualIntA(a, ARCHIVE_OK,
+		    archive_read_next_header(a, &ae));
 		assertEqualString(n[i], archive_entry_pathname(ae));
 	}
 
@@ -60,22 +58,10 @@ verify(const char *name)
 	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
 
 	/* Verify that the format detection worked. */
-	assertEqualInt(archive_compression(a), ARCHIVE_COMPRESSION_LRZIP);
-	assertEqualString(archive_compression_name(a), "lrzip");
+	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_COMPRESSION_LRZIP);
+	assertEqualString(archive_filter_name(a, 0), "lrzip");
 	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_GNUTAR);
 
 	assertEqualInt(ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 }
-
-
-DEFINE_TEST(test_compat_lrzip)
-{
-	if (canLrzip()) {
-		verify("test_compat_lrzip.tar.lrz");
-	} else {
-		skipping("lrzip command-line program not found");
-	}
-}
-
-

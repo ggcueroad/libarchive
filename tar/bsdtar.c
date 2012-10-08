@@ -267,6 +267,13 @@ main(int argc, char **argv)
 			/* Explicit -b forces last block size. */
 			bsdtar->bytes_in_last_block = bsdtar->bytes_per_block;
 			break;
+		case OPTION_B64ENCODE:
+			if (bsdtar->add_filter != '\0')
+				lafe_errc(1, 0,
+				    "Can't specify both --uuencode and "
+				    "--b64encode");
+			bsdtar->add_filter = opt;
+			break;
 		case 'C': /* GNU tar */
 			if (strlen(bsdtar->argument) == 0)
 				lafe_errc(1, 0,
@@ -372,8 +379,10 @@ main(int argc, char **argv)
 			/* GNU tar 1.13  used -l for --one-file-system */
 			bsdtar->option_warn_links = 1;
 			break;
+		case OPTION_LRZIP:
 		case OPTION_LZIP: /* GNU tar beginning with 1.23 */
 		case OPTION_LZMA: /* GNU tar beginning with 1.20 */
+		case OPTION_LZOP: /* GNU tar beginning with 1.21 */
 			if (bsdtar->create_compression != '\0')
 				lafe_errc(1, 0,
 				    "Can't specify both -%c and -%c", opt,
@@ -569,6 +578,13 @@ main(int argc, char **argv)
 			break;
 		case OPTION_UNAME: /* cpio */
 			bsdtar->uname = bsdtar->argument;
+			break;
+		case OPTION_UUENCODE:
+			if (bsdtar->add_filter != '\0')
+				lafe_errc(1, 0,
+				    "Can't specify both --uuencode and "
+				    "--b64encode");
+			bsdtar->add_filter = opt;
 			break;
 		case 'v': /* SUSv2 */
 			bsdtar->verbose++;

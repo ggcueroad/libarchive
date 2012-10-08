@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger
+ * Copyright (c) 2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,6 +45,7 @@ __FBSDID("$FreeBSD: head/lib/libarchive/archive_write_set_compression_program.c 
 
 #include "archive.h"
 #include "archive_private.h"
+#include "archive_string.h"
 #include "archive_write_private.h"
 #include "filter_fork.h"
 
@@ -58,8 +60,13 @@ archive_write_set_compression_program(struct archive *a, const char *cmd)
 
 struct private_data {
 	char		*cmd;
-	char		*description;
+	char		**argv;
+	struct archive_string description;
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	HANDLE		 child;
+#else
 	pid_t		 child;
+#endif
 	int		 child_stdin, child_stdout;
 
 	char		*child_buf;
@@ -71,6 +78,8 @@ static int archive_compressor_program_write(struct archive_write_filter *,
 		    const void *, size_t);
 static int archive_compressor_program_close(struct archive_write_filter *);
 static int archive_compressor_program_free(struct archive_write_filter *);
+static int write_add_filter_programv(struct archive *, const char *,
+    char * const *);
 
 /*
  * Add a filter to this write handle that passes all data through an
@@ -79,28 +88,149 @@ static int archive_compressor_program_free(struct archive_write_filter *);
 int
 archive_write_add_filter_program(struct archive *_a, const char *cmd)
 {
-	struct archive_write_filter *f = __archive_write_allocate_filter(_a);
-	struct archive_write *a = (struct archive_write *)_a;
-	struct private_data *data;
-	static const char *prefix = "Program: ";
-	archive_check_magic(&a->archive, ARCHIVE_WRITE_MAGIC,
+	char *argv[2];
+	int r;
+
+	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
 	    ARCHIVE_STATE_NEW, "archive_write_add_filter_program");
-	data = calloc(1, sizeof(*data));
-	if (data == NULL) {
-		archive_set_error(&a->archive, ENOMEM, "Out of memory");
+
+	argv[0] = strdup(cmd);
+	if (argv[0] == NULL) {
+		archive_set_error(_a, ENOMEM,
+		    "Can't allocate memory for filter program");
 		return (ARCHIVE_FATAL);
 	}
-	data->cmd = strdup(cmd);
-	data->description = (char *)malloc(strlen(prefix) + strlen(cmd) + 1);
-	strcpy(data->description, prefix);
-	strcat(data->description, cmd);
+	argv[1] = NULL;
+	r = write_add_filter_programv(_a, cmd, argv);
+	free(argv[0]);
+	return (r);
+}
 
-	f->name = data->description;
+int
+archive_write_add_filter_programl(struct archive *_a, const char *cmd,
+    const char *arg, ...)
+{
+	va_list ap;
+	char **argv;
+	char *val;
+	int i, r;
+
+	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
+	    ARCHIVE_STATE_NEW, "archive_write_add_filter_programl");
+
+	i = 2;
+	if (arg != NULL) {
+		va_start(ap, arg);
+		while (va_arg(ap, char *) != NULL)
+			i++;
+		va_end(ap);
+	}
+	argv = malloc(i * sizeof(char *));
+	if (argv == NULL)
+		goto memerr;
+
+	if (arg != NULL) {
+		argv[0] = strdup(arg);
+		if (argv[0] == NULL)
+			goto memerr;
+		i = 1;
+		va_start(ap, arg);
+		while ((val = va_arg(ap, char *)) != NULL) {
+			argv[i] = strdup(val);
+			if (argv[i] == NULL)
+				goto memerr;
+			i++;	
+		}
+		va_end(ap);
+		argv[i] = NULL;
+	} else {
+		argv[0] = strdup(cmd);
+		if (argv[0] == NULL)
+			goto memerr;
+		argv[1] = NULL;
+	}
+
+	r = write_add_filter_programv(_a, cmd, argv);
+	for (i = 0; argv[i] != NULL; i++)
+		free(argv[i]);
+	free(argv);
+	return (r);
+memerr:
+	if (argv) {
+		for (i = 0; argv[i] != NULL; i++)
+			free(argv[i]);
+		free(argv);
+	}
+	archive_set_error(_a, ENOMEM,
+	    "Can't allocate memory for filter program");
+	return (ARCHIVE_FATAL);
+}
+
+int
+archive_write_add_filter_programv(struct archive *_a, const char *cmd,
+    char * const argv[])
+{
+
+	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
+	    ARCHIVE_STATE_NEW, "archive_write_add_filter_programv");
+
+	return write_add_filter_programv(_a, cmd, argv);
+}
+
+static int
+write_add_filter_programv(struct archive *_a, const char *cmd,
+    char * const argv[])
+{
+
+	struct archive_write_filter *f = __archive_write_allocate_filter(_a);
+	struct private_data *data;
+	static const char *prefix = "Program: ";
+	int i;
+	size_t l;
+
+	data = calloc(1, sizeof(*data));
+	if (data == NULL)
+		goto memerr;
+	data->cmd = strdup(cmd);
+	if (data->cmd == NULL)
+		goto memerr;
+
+	/* Reproduce argv. */
+	for (i = 0; argv[i] != NULL; i++)
+		;
+	data->argv = calloc(i + 1, sizeof(char *));
+	if (data->argv == NULL)
+		goto memerr;
+	l = strlen(prefix) + strlen(cmd) + 1;
+	for (i = 0; argv[i] != NULL; i++) {
+		data->argv[i] = strdup(argv[i]);
+		if (data->argv[i] == NULL)
+			goto memerr;
+		l += strlen(data->argv[i]) + 1;
+	}
+
+	/* Make up a description string. */
+	if (archive_string_ensure(&data->description, l) == NULL)
+		goto memerr;
+	archive_strcpy(&data->description, prefix);
+	archive_strcat(&data->description, cmd);
+	for (i = 0; argv[i] != NULL; i++) {
+		archive_strappend_char(&data->description, ' ');
+		archive_strcat(&data->description, data->argv[i]);
+	}
+
+	f->name = data->description.s;
 	f->data = data;
 	f->open = &archive_compressor_program_open;
 	f->code = ARCHIVE_COMPRESSION_PROGRAM;
 	f->free = archive_compressor_program_free;
 	return (ARCHIVE_OK);
+memerr:
+	free(data);
+	archive_compressor_program_free(f);
+	archive_set_error(_a, ENOMEM,
+	    "Can't allocate memory for filter program");
+	return (ARCHIVE_FATAL);
 }
 
 /*
@@ -110,6 +240,7 @@ static int
 archive_compressor_program_open(struct archive_write_filter *f)
 {
 	struct private_data *data = (struct private_data *)f->data;
+	pid_t child;
 	int ret;
 
 	ret = __archive_write_open_filter(f->next_filter);
@@ -128,12 +259,27 @@ archive_compressor_program_open(struct archive_write_filter *f)
 		}
 	}
 
-	if ((data->child = __archive_create_child(data->cmd,
-		 &data->child_stdin, &data->child_stdout)) == -1) {
+	child = __archive_create_child(data->cmd, (char * const *)data->argv,
+		 &data->child_stdin, &data->child_stdout);
+	if (child == -1) {
 		archive_set_error(f->archive, EINVAL,
 		    "Can't initialise filter");
 		return (ARCHIVE_FATAL);
 	}
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	data->child = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, child);
+	if (data->child == NULL) {
+		close(data->child_stdin);
+		data->child_stdin = -1;
+		close(data->child_stdout);
+		data->child_stdout = -1;
+		archive_set_error(f->archive, EINVAL,
+		    "Can't initialise filter");
+		return (ARCHIVE_FATAL);
+	}
+#else
+	data->child = child;
+#endif
 
 	f->write = archive_compressor_program_write;
 	f->close = archive_compressor_program_close;
@@ -199,14 +345,9 @@ child_write(struct archive_write_filter *f, const char *buf, size_t buf_len)
 
 		ret = __archive_write_filter(f->next_filter,
 		    data->child_buf, data->child_buf_avail);
-		if (ret <= 0)
+		if (ret != ARCHIVE_OK)
 			return (-1);
-
-		if ((size_t)ret < data->child_buf_avail) {
-			memmove(data->child_buf, data->child_buf + ret,
-			    data->child_buf_avail - ret);
-		}
-		data->child_buf_avail -= ret;
+		data->child_buf_avail = 0;
 	}
 }
 
@@ -285,6 +426,10 @@ cleanup:
 		close(data->child_stdout);
 	while (waitpid(data->child, &status, 0) == -1 && errno == EINTR)
 		continue;
+#if defined(_WIN32) && !defined(__CYGWIN__)
+	CloseHandle(data->child);
+#endif
+	data->child = 0;
 
 	if (status != 0) {
 		archive_set_error(f->archive, EIO,
@@ -299,10 +444,23 @@ static int
 archive_compressor_program_free(struct archive_write_filter *f)
 {
 	struct private_data *data = (struct private_data *)f->data;
-	free(data->cmd);
-	free(data->description);
-	free(data->child_buf);
-	free(data);
-	f->data = NULL;
+
+	if (data) {
+#if defined(_WIN32) && !defined(__CYGWIN__)
+		if (data->child)
+			CloseHandle(data->child);
+#endif
+		if (data->argv != NULL) {
+			int i;
+			for (i = 0; data->argv[i] != NULL; i++)
+				free(data->argv[i]);
+			free(data->argv);
+		}
+		free(data->cmd);
+		archive_string_free(&data->description);
+		free(data->child_buf);
+		free(data);
+		f->data = NULL;
+	}
 	return (ARCHIVE_OK);
 }

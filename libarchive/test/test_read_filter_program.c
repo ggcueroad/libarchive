@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2003-2007 Tim Kientzle
+ * Copyright (c) 2012 Michhiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +33,7 @@ static unsigned char archive[] = {
 148,'d',230,226,'U','G','H',30,234,15,'8','=',10,'F',193,'(',24,5,131,28,
 0,0,29,172,5,240,0,6,0,0};
 
-DEFINE_TEST(test_read_compress_program)
+DEFINE_TEST(test_read_filter_program)
 {
 	int r;
 	struct archive_entry *ae;
@@ -75,10 +76,103 @@ DEFINE_TEST(test_read_compress_program)
 	    archive_read_open_memory(a, archive, sizeof(archive)));
 	assertEqualIntA(a, ARCHIVE_OK,
 	    archive_read_next_header(a, &ae));
-	assertEqualInt(archive_compression(a), ARCHIVE_COMPRESSION_PROGRAM);
+	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_COMPRESSION_PROGRAM);
 	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_USTAR);
 	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
 	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
 }
 
 
+DEFINE_TEST(test_read_filter_programl)
+{
+	int r;
+	struct archive_entry *ae;
+	struct archive *a;
+
+	/*
+	 * First, test handling when a non-existent compression
+	 * program is requested.
+	 */
+	assert((a = archive_read_new()) != NULL);
+	r = archive_read_support_filter_program(a, "nonexistent");
+	if (r == ARCHIVE_FATAL) {
+		skipping("archive_read_support_filter_program() "
+		    "unsupported on this platform");
+		return;
+	}
+	assertEqualIntA(a, ARCHIVE_OK, r);
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_FATAL,
+	    archive_read_open_memory(a, archive, sizeof(archive)));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+
+	if (!canGzip()) {
+		skipping("Can't run gzip program on this platform");
+		return;
+	}
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_filter_none(a));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_filter_programl(a, "gzip", "gzip",
+		"-d", NULL));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_open_memory(a, archive, sizeof(archive)));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_next_header(a, &ae));
+	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_COMPRESSION_PROGRAM);
+	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_USTAR);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}
+
+DEFINE_TEST(test_read_filter_programv)
+{
+	int r;
+	struct archive_entry *ae;
+	struct archive *a;
+	char * const argv[] = {"gzip", "-d", NULL};
+
+	/*
+	 * First, test handling when a non-existent compression
+	 * program is requested.
+	 */
+	assert((a = archive_read_new()) != NULL);
+	r = archive_read_support_filter_program(a, "nonexistent");
+	if (r == ARCHIVE_FATAL) {
+		skipping("archive_read_support_filter_program() "
+		    "unsupported on this platform");
+		return;
+	}
+	assertEqualIntA(a, ARCHIVE_OK, r);
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_FATAL,
+	    archive_read_open_memory(a, archive, sizeof(archive)));
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+
+	if (!canGzip()) {
+		skipping("Can't run gzip program on this platform");
+		return;
+	}
+	assert((a = archive_read_new()) != NULL);
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_filter_none(a));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_filter_programv(a, "gzip", argv));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_support_format_all(a));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_open_memory(a, archive, sizeof(archive)));
+	assertEqualIntA(a, ARCHIVE_OK,
+	    archive_read_next_header(a, &ae));
+	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_COMPRESSION_PROGRAM);
+	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_USTAR);
+	assertEqualIntA(a, ARCHIVE_OK, archive_read_close(a));
+	assertEqualInt(ARCHIVE_OK, archive_read_free(a));
+}

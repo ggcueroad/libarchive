@@ -61,6 +61,7 @@ static const struct option {
 	int required;	/* 1 if this option requires an argument */
 	int equivalent;	/* Equivalent short option. */
 } cpio_longopts[] = {
+	{ "b64encode",			0, OPTION_B64ENCODE },
 	{ "create",			0, 'o' },
 	{ "dot",			0, 'V' },
 	{ "extract",			0, 'i' },
@@ -70,7 +71,9 @@ static const struct option {
 	{ "insecure",			0, OPTION_INSECURE },
 	{ "link",			0, 'l' },
 	{ "list",			0, 't' },
+	{ "lrzip",			0, OPTION_LRZIP },
 	{ "lzma",			0, OPTION_LZMA },
+	{ "lzop",			0, OPTION_LZOP },
 	{ "make-directories",		0, 'd' },
 	{ "no-preserve-owner",		0, OPTION_NO_PRESERVE_OWNER },
 	{ "null",			0, '0' },
@@ -81,6 +84,7 @@ static const struct option {
 	{ "preserve-owner",		0, OPTION_PRESERVE_OWNER },
 	{ "quiet",			0, OPTION_QUIET },
 	{ "unconditional",		0, 'u' },
+	{ "uuencode",			0, OPTION_UUENCODE },
 	{ "verbose",			0, 'v' },
 	{ "version",			0, OPTION_VERSION },
 	{ "xz",				0, 'J' },

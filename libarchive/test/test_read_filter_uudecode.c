@@ -125,10 +125,10 @@ test_read_uu_sub(const char *uudata, size_t uusize, int no_nl)
 		    read_open_memory(a, buff, size, 2));
 		assertEqualIntA(a, ARCHIVE_OK,
 		    archive_read_next_header(a, &ae));
-		failure("archive_compression_name(a)=\"%s\""
+		failure("archive_filter_name(a, 0)=\"%s\""
 		    "extra %d, NL %d",
-		    archive_compression_name(a), extra, !no_nl);
-		assertEqualInt(archive_compression(a),
+		    archive_filter_name(a, 0), extra, !no_nl);
+		assertEqualInt(archive_filter_code(a, 0),
 		    ARCHIVE_COMPRESSION_COMPRESS);
 		failure("archive_format_name(a)=\"%s\""
 		    "extra %d, NL %d",
@@ -159,17 +159,20 @@ test_read_uu_sub(const char *uudata, size_t uusize, int no_nl)
 	free(buff);
 }
 
-DEFINE_TEST(test_read_uu)
+DEFINE_TEST(test_read_filter_uudecode)
 {
 	/* Read the traditional uuencoded data. */
 	test_read_uu_sub(archive, sizeof(archive)-1, 0);
-	/* Read the Base64 uuencoded data. */
-	test_read_uu_sub(archive64, sizeof(archive64)-1, 0);
 	/* Read the traditional uuencoded data with very long line extra
 	 * data in front of it. */
 	test_read_uu_sub(archive, sizeof(archive)-1, 1);
+}
+
+DEFINE_TEST(test_read_filter_uudecode_base64)
+{
+	/* Read the Base64 uuencoded data. */
+	test_read_uu_sub(archive64, sizeof(archive64)-1, 0);
 	/* Read the Base64 uuencoded data with very long line extra data
 	 * in front of it. */
 	test_read_uu_sub(archive64, sizeof(archive64)-1, 1);
 }
-

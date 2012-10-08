@@ -163,7 +163,7 @@ struct archive_read {
 	struct archive_read_client client;
 
 	/* Registered filter bidders. */
-	struct archive_read_filter_bidder bidders[10];
+	struct archive_read_filter_bidder bidders[14];
 
 	/* Last filter in chain */
 	struct archive_read_filter *filter;
@@ -225,5 +225,8 @@ int64_t	__archive_read_seek(struct archive_read*, int64_t, int);
 int64_t	__archive_read_filter_seek(struct archive_read_filter *, int64_t, int);
 int64_t	__archive_read_consume(struct archive_read *, int64_t);
 int64_t	__archive_read_filter_consume(struct archive_read_filter *, int64_t);
-int __archive_read_program(struct archive_read_filter *, const char *);
+int __archive_read_programl(struct archive_read_filter *, const char *,
+    const char *, .../*, (char *)0 */);
+int __archive_read_programv(struct archive_read_filter *, const char *,
+    char * const argv[]);
 #endif

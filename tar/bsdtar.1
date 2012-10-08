@@ -24,7 +24,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd October 3, 2012
+.Dd October 7, 2012
 .Dt TAR 1
 .Os
 .Sh NAME
@@ -286,6 +286,11 @@ With this option, the target of the link will be archived instead.
 .It Fl l , Fl Fl check-links
 (c and r modes only)
 Issue a warning message unless all links to each file are archived.
+.It Fl Fl lrzip
+(c mode only)
+Compress the resulting archive with
+.Xr lrzip 1 .
+In extract or list modes, this option is ignored.
 .It Fl Fl lzma
 (c mode only) Compress the resulting archive with the original LZMA algorithm.
 Use of this option is discouraged and new archives should be created with
@@ -295,6 +300,11 @@ Note that, unlike other
 .Nm tar
 implementations, this implementation recognizes LZMA compression
 automatically when reading archives.
+.It Fl Fl lzop
+(c mode only)
+Compress the resulting archive with
+.Xr lzop 1 .
+In extract or list modes, this option is ignored.
 .It Fl m , Fl Fl modification-time
 (x mode only)
 Do not extract modification time.

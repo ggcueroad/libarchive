@@ -46,7 +46,6 @@ IF(ENABLE_TEST)
     test_compat_cpio.c
     test_compat_gtar.c
     test_compat_gzip.c
-    test_compat_lrzip.c
     test_compat_lzip.c
     test_compat_lzma.c
     test_compat_mac.c
@@ -54,6 +53,7 @@ IF(ENABLE_TEST)
     test_compat_solaris_tar_acl.c
     test_compat_solaris_pax_sparse.c
     test_compat_tar_hardlink.c
+    test_compat_uudecode.c
     test_compat_xz.c
     test_compat_zip.c
     test_empty_write.c
@@ -69,13 +69,17 @@ IF(ENABLE_TEST)
     test_open_file.c
     test_open_filename.c
     test_pax_filename_encoding.c
-    test_read_compress_program.c
     test_read_data_large.c
     test_read_disk.c
     test_read_disk_directory_traversals.c
     test_read_disk_entry_from_file.c
     test_read_extract.c
     test_read_file_nonexistent.c
+    test_read_filter_program.c
+    test_read_filter_program_signature.c
+    test_read_filter_uudecode.c
+    test_read_filter_lrzip.c
+    test_read_filter_lzop.c
     test_read_format_7zip.c
     test_read_format_ar.c
     test_read_format_cab.c
@@ -135,20 +139,11 @@ IF(ENABLE_TEST)
     test_read_position.c
     test_read_truncated.c
     test_read_truncated_filter.c
-    test_read_uu.c
     test_sparse_basic.c
     test_tar_filenames.c
     test_tar_large.c
     test_ustar_filenames.c
     test_ustar_filename_encoding.c
-    test_write_compress.c
-    test_write_compress_bzip2.c
-    test_write_compress_gzip.c
-    test_write_compress_lrzip.c
-    test_write_compress_lzip.c
-    test_write_compress_lzma.c
-    test_write_compress_program.c
-    test_write_compress_xz.c
     test_write_disk.c
     test_write_disk_failures.c
     test_write_disk_hardlink.c
@@ -158,6 +153,17 @@ IF(ENABLE_TEST)
     test_write_disk_sparse.c
     test_write_disk_symlink.c
     test_write_disk_times.c
+    test_write_filter_b64encode.c
+    test_write_filter_bzip2.c
+    test_write_filter_compress.c
+    test_write_filter_gzip.c
+    test_write_filter_lrzip.c
+    test_write_filter_lzip.c
+    test_write_filter_lzma.c
+    test_write_filter_lzop.c
+    test_write_filter_program.c
+    test_write_filter_uuencode.c
+    test_write_filter_xz.c
     test_write_format_7zip.c
     test_write_format_ar.c
     test_write_format_cpio.c
