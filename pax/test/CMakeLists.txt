@@ -10,6 +10,14 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test.h
     test_0.c
     test_basic.c
+    test_extract_pax_Z.c
+    test_extract_pax_bz2.c
+    test_extract_pax_gz.c
+    test_extract_pax_lrz.c
+    test_extract_pax_lz.c
+    test_extract_pax_lzma.c
+    test_extract_pax_lzo.c
+    test_extract_pax_xz.c
     test_format_newc.c
     test_help.c
     test_option_D_upper.c
@@ -21,13 +29,16 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test_option_Z_upper.c
     test_option_a.c
     test_option_b.c
+    test_option_b64encode.c
     test_option_c.c
     test_option_compress.c
     test_option_d.c
     test_option_j.c
     test_option_k.c
     test_option_l.c
+    test_option_lrzip.c
     test_option_lzma.c
+    test_option_lzop.c
     test_option_n.c
     test_option_nodump.c
     test_option_null.c
@@ -35,6 +46,8 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test_option_s.c
     test_option_t.c
     test_option_u.c
+    test_option_uuencode.c
+    test_option_xz.c
     test_option_z.c
     test_options_listopt.c
     test_print_longpath.c

@@ -1001,6 +1001,14 @@ bsdpax_test_SOURCES=						\
 	pax/test/test.h						\
 	pax/test/test_0.c					\
 	pax/test/test_basic.c					\
+	pax/test/test_extract_pax_Z.c				\
+	pax/test/test_extract_pax_bz2.c				\
+	pax/test/test_extract_pax_gz.c				\
+	pax/test/test_extract_pax_lrz.c				\
+	pax/test/test_extract_pax_lz.c				\
+	pax/test/test_extract_pax_lzma.c			\
+	pax/test/test_extract_pax_lzo.c				\
+	pax/test/test_extract_pax_xz.c				\
 	pax/test/test_format_newc.c				\
 	pax/test/test_help.c					\
 	pax/test/test_option_D_upper.c				\
@@ -1012,13 +1020,16 @@ bsdpax_test_SOURCES=						\
 	pax/test/test_option_Z_upper.c				\
 	pax/test/test_option_a.c				\
 	pax/test/test_option_b.c				\
+	pax/test/test_option_b64encode.c			\
 	pax/test/test_option_c.c				\
 	pax/test/test_option_compress.c				\
 	pax/test/test_option_d.c				\
 	pax/test/test_option_j.c				\
 	pax/test/test_option_k.c				\
 	pax/test/test_option_l.c				\
+	pax/test/test_option_lrzip.c				\
 	pax/test/test_option_lzma.c				\
+	pax/test/test_option_lzop.c				\
 	pax/test/test_option_n.c				\
 	pax/test/test_option_nodump.c				\
 	pax/test/test_option_null.c				\
@@ -1026,6 +1037,8 @@ bsdpax_test_SOURCES=						\
 	pax/test/test_option_s.c				\
 	pax/test/test_option_t.c				\
 	pax/test/test_option_u.c				\
+	pax/test/test_option_uuencode.c				\
+	pax/test/test_option_xz.c				\
 	pax/test/test_option_z.c				\
 	pax/test/test_options_listopt.c				\
 	pax/test/test_print_longpath.c				\
@@ -1051,7 +1064,15 @@ bsdpax_TESTS_ENVIRONMENT=
 endif
 
 bsdpax_test_EXTRA_DIST=			\
-	pax/test/list.h		\
+	pax/test/list.h				\
+	pax/test/test_extract.pax.Z.uu		\
+	pax/test/test_extract.pax.bz2.uu	\
+	pax/test/test_extract.pax.gz.uu		\
+	pax/test/test_extract.pax.lrz.uu	\
+	pax/test/test_extract.pax.lz.uu		\
+	pax/test/test_extract.pax.lzma.uu	\
+	pax/test/test_extract.pax.lzo.uu	\
+	pax/test/test_extract.pax.xz.uu		\
 	pax/test/test_option_T_upper.pax.uu	\
 	pax/test/test_options_listopt.pax.Z.uu	\
 	pax/test/test_print_longpath.tar.Z.uu	\
