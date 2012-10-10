@@ -26,7 +26,7 @@
 
 DEFINE_TEST(test_read_filter_lrzip)
 {
-	const char *name = "test_compat_lrzip.tar.lrz";
+	const char *name = "test_read_filter_lrzip.tar.lrz";
 	/* lrzip tracks directories as files, ensure that we list everything */
 	const char *n[] = {
 		"d1/", "d1/f1", "d1/f2", "d1/f3", "f1", "f2", "f3", NULL };
@@ -58,7 +58,7 @@ DEFINE_TEST(test_read_filter_lrzip)
 	assertEqualIntA(a, ARCHIVE_EOF, archive_read_next_header(a, &ae));
 
 	/* Verify that the format detection worked. */
-	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_COMPRESSION_LRZIP);
+	assertEqualInt(archive_filter_code(a, 0), ARCHIVE_FILTER_LRZIP);
 	assertEqualString(archive_filter_name(a, 0), "lrzip");
 	assertEqualInt(archive_format(a), ARCHIVE_FORMAT_TAR_GNUTAR);
 

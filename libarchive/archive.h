@@ -222,6 +222,7 @@ typedef int archive_switch_callback(struct archive *, void *_client_data1,
 #define	ARCHIVE_FILTER_LZIP	9
 #define	ARCHIVE_FILTER_LRZIP	10
 #define	ARCHIVE_FILTER_LZOP	11
+#define	ARCHIVE_FILTER_GRZIP	12
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
 #define	ARCHIVE_COMPRESSION_NONE	ARCHIVE_FILTER_NONE
@@ -307,28 +308,39 @@ __LA_DECL struct archive	*archive_read_new(void);
  */
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
-__LA_DECL int archive_read_support_compression_all(struct archive *);
-__LA_DECL int archive_read_support_compression_bzip2(struct archive *);
-__LA_DECL int archive_read_support_compression_compress(struct archive *);
-__LA_DECL int archive_read_support_compression_gzip(struct archive *);
-__LA_DECL int archive_read_support_compression_lzip(struct archive *);
-__LA_DECL int archive_read_support_compression_lzma(struct archive *);
-__LA_DECL int archive_read_support_compression_none(struct archive *);
+__LA_DECL int archive_read_support_compression_all(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_bzip2(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_compress(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_gzip(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_lzip(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_lzma(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_none(struct archive *)
+		__LA_DEPRECATED;
 __LA_DECL int archive_read_support_compression_program(struct archive *,
-		     const char *command);
+		     const char *command) __LA_DEPRECATED;
 __LA_DECL int archive_read_support_compression_program_signature
 		(struct archive *, const char *,
-				    const void * /* match */, size_t);
+		 const void * /* match */, size_t) __LA_DEPRECATED;
 
-__LA_DECL int archive_read_support_compression_rpm(struct archive *);
-__LA_DECL int archive_read_support_compression_uu(struct archive *);
-__LA_DECL int archive_read_support_compression_xz(struct archive *);
+__LA_DECL int archive_read_support_compression_rpm(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_uu(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_read_support_compression_xz(struct archive *)
+		__LA_DEPRECATED;
 #endif
 
 __LA_DECL int archive_read_support_filter_all(struct archive *);
 __LA_DECL int archive_read_support_filter_bzip2(struct archive *);
 __LA_DECL int archive_read_support_filter_compress(struct archive *);
 __LA_DECL int archive_read_support_filter_gzip(struct archive *);
+__LA_DECL int archive_read_support_filter_grzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lrzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzma(struct archive *);
@@ -567,7 +579,7 @@ __LA_DECL int		 archive_read_close(struct archive *);
 __LA_DECL int		 archive_read_free(struct archive *);
 #if ARCHIVE_VERSION_NUMBER < 4000000
 /* Synonym for archive_read_free() for backwards compatibility. */
-__LA_DECL int		 archive_read_finish(struct archive *);
+__LA_DECL int		 archive_read_finish(struct archive *) __LA_DEPRECATED;
 #endif
 
 /*-
@@ -600,15 +612,22 @@ __LA_DECL int archive_write_set_skip_file(struct archive *,
     __LA_INT64_T, __LA_INT64_T);
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
-__LA_DECL int archive_write_set_compression_bzip2(struct archive *);
-__LA_DECL int archive_write_set_compression_compress(struct archive *);
-__LA_DECL int archive_write_set_compression_gzip(struct archive *);
-__LA_DECL int archive_write_set_compression_lzip(struct archive *);
-__LA_DECL int archive_write_set_compression_lzma(struct archive *);
-__LA_DECL int archive_write_set_compression_none(struct archive *);
+__LA_DECL int archive_write_set_compression_bzip2(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_write_set_compression_compress(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_write_set_compression_gzip(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_write_set_compression_lzip(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_write_set_compression_lzma(struct archive *)
+		__LA_DEPRECATED;
+__LA_DECL int archive_write_set_compression_none(struct archive *)
+		__LA_DEPRECATED;
 __LA_DECL int archive_write_set_compression_program(struct archive *,
-		     const char *cmd);
-__LA_DECL int archive_write_set_compression_xz(struct archive *);
+		     const char *cmd) __LA_DEPRECATED;
+__LA_DECL int archive_write_set_compression_xz(struct archive *)
+		__LA_DEPRECATED;
 #endif
 
 /* A convenience function to set the filter based on the code. */
@@ -616,6 +635,7 @@ __LA_DECL int archive_write_add_filter(struct archive *, int filter_code);
 __LA_DECL int archive_write_add_filter_b64encode(struct archive *);
 __LA_DECL int archive_write_add_filter_bzip2(struct archive *);
 __LA_DECL int archive_write_add_filter_compress(struct archive *);
+__LA_DECL int archive_write_add_filter_grzip(struct archive *);
 __LA_DECL int archive_write_add_filter_gzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lrzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lzip(struct archive *);
@@ -696,7 +716,7 @@ __LA_DECL int            archive_write_fail(struct archive *);
 __LA_DECL int		 archive_write_free(struct archive *);
 #if ARCHIVE_VERSION_NUMBER < 4000000
 /* Synonym for archive_write_free() for backwards compatibility. */
-__LA_DECL int		 archive_write_finish(struct archive *);
+__LA_DECL int		 archive_write_finish(struct archive *) __LA_DEPRECATED;
 #endif
 
 /*
