@@ -277,6 +277,9 @@ int canSymlink(void);
 /* Return true if this platform can run the "bunzip2" program. */
 int canBunzip2(void);
 
+/* Return true if this platform can run the "grzip" program. */
+int canGrzip(void);
+
 /* Return true if this platform can run the "gzip" program. */
 int canGzip(void);
 

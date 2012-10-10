@@ -12,6 +12,7 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test_basic.c
     test_extract_pax_Z.c
     test_extract_pax_bz2.c
+    test_extract_pax_grz.c
     test_extract_pax_gz.c
     test_extract_pax_lrz.c
     test_extract_pax_lz.c
@@ -33,6 +34,7 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test_option_c.c
     test_option_compress.c
     test_option_d.c
+    test_option_grzip.c
     test_option_j.c
     test_option_k.c
     test_option_l.c

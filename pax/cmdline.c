@@ -77,6 +77,7 @@ static const struct bsdpax_option {
 	{ "fast-read",			0, 'n' },
 	{ "file",			1, 'f' },
 	{ "format",			1, 'x' },
+	{ "grzip",			0, OPTION_GRZIP },
 	{ "gunzip",			0, 'z' },
 	{ "gzip",			0, 'z' },
 	{ "help",			0, OPTION_HELP },

@@ -280,6 +280,11 @@ main(int argc, char **argv)
 				lafe_errc(1, 0,
 				    "Argument to -G # must be positive");
 			break;
+		case OPTION_GRZIP:
+			if (bsdpax->create_compression != '\0')
+				compression_conflict_error(bsdpax, opt);
+			bsdpax->create_compression = opt;
+			break;
 		case 'H':
 			bsdpax->symlink_mode = opt;
 			break;

@@ -1014,6 +1014,7 @@ bsdpax_test_SOURCES=						\
 	pax/test/test_basic.c					\
 	pax/test/test_extract_pax_Z.c				\
 	pax/test/test_extract_pax_bz2.c				\
+	pax/test/test_extract_pax_grz.c				\
 	pax/test/test_extract_pax_gz.c				\
 	pax/test/test_extract_pax_lrz.c				\
 	pax/test/test_extract_pax_lz.c				\
@@ -1035,6 +1036,7 @@ bsdpax_test_SOURCES=						\
 	pax/test/test_option_c.c				\
 	pax/test/test_option_compress.c				\
 	pax/test/test_option_d.c				\
+	pax/test/test_option_grzip.c				\
 	pax/test/test_option_j.c				\
 	pax/test/test_option_k.c				\
 	pax/test/test_option_l.c				\
@@ -1078,6 +1080,7 @@ bsdpax_test_EXTRA_DIST=			\
 	pax/test/list.h				\
 	pax/test/test_extract.pax.Z.uu		\
 	pax/test/test_extract.pax.bz2.uu	\
+	pax/test/test_extract.pax.grz.uu	\
 	pax/test/test_extract.pax.gz.uu		\
 	pax/test/test_extract.pax.lrz.uu	\
 	pax/test/test_extract.pax.lz.uu		\

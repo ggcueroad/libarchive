@@ -155,6 +155,9 @@ pax_mode_write(struct bsdpax *bsdpax)
 		case 0:
 			r = ARCHIVE_OK;
 			break;
+		case OPTION_GRZIP:
+			r = archive_write_add_filter_grzip(a);
+			break;
 		case 'j':
 			r = archive_write_add_filter_bzip2(a);
 			break;
