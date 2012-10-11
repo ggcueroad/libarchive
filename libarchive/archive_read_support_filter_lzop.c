@@ -72,6 +72,8 @@ archive_read_support_filter_lzop(struct archive *_a)
 	reader->options = NULL;
 	reader->free = lzop_reader_free;
 	/* Return ARCHIVE_WARN since this always uses an external program. */
+	archive_set_error(_a, ARCHIVE_ERRNO_MISC,
+	    "Using external lzop program for lzop decompression");
 	return (ARCHIVE_WARN);
 }
 
@@ -109,8 +111,8 @@ lzop_bidder_init(struct archive_read_filter *self)
 {
 	int r;
 
-	r = __archive_read_programl(self, "lzop", "lzop", "-d", NULL);
-	/* Note: We set the format here even if __archive_read_programl()
+	r = __archive_read_program(self, "lzop -d");
+	/* Note: We set the format here even if __archive_read_program()
 	 * above fails.  We do, after all, know what the format is
 	 * even if we weren't able to read it. */
 	self->code = ARCHIVE_FILTER_LZOP;

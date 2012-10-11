@@ -27,19 +27,139 @@
 
 __FBSDID("$FreeBSD$");
 
+#ifdef HAVE_ERRNO_H
+#include <errno.h>
+#endif
+#ifdef HAVE_STDLIB_H
+#include <stdlib.h>
+#endif
+#ifdef HAVE_STRING_H
+#include <string.h>
+#endif
+
 #include "archive.h"
+#include "archive_string.h"
 #include "archive_write_private.h"
 
+struct write_lzop {
+	struct archive_write_program_data *pdata;
+	int compression_level;
+};
+
+static int archive_write_lzop_open(struct archive_write_filter *);
+static int archive_write_lzop_options(struct archive_write_filter *,
+		    const char *, const char *);
+static int archive_write_lzop_write(struct archive_write_filter *,
+		    const void *, size_t);
+static int archive_write_lzop_close(struct archive_write_filter *);
+static int archive_write_lzop_free(struct archive_write_filter *);
+
 int
-archive_write_add_filter_lzop(struct archive *a)
+archive_write_add_filter_lzop(struct archive *_a)
 {
-	char * const argv[] = { "lzop", NULL };
+	struct archive_write_filter *f = __archive_write_allocate_filter(_a);
+	struct write_lzop *data;
+
+	archive_check_magic(_a, ARCHIVE_WRITE_MAGIC,
+	    ARCHIVE_STATE_NEW, "archive_write_add_filter_lzop");
+
+	data = calloc(1, sizeof(*data));
+	if (data == NULL) {
+		archive_set_error(_a, ENOMEM, "Can't allocate memory");
+		return (ARCHIVE_FATAL);
+	}
+	data->pdata = __archive_write_program_allocate();
+	if (data->pdata == NULL) {
+		free(data);
+		archive_set_error(_a, ENOMEM, "Can't allocate memory");
+		return (ARCHIVE_FATAL);
+	}
+
+	f->name = "lzop";
+	f->code = ARCHIVE_FILTER_LZOP;
+	f->data = data;
+	f->open = archive_write_lzop_open;
+	f->options = archive_write_lzop_options;
+	f->write = archive_write_lzop_write;
+	f->close = archive_write_lzop_close;
+	f->free = archive_write_lzop_free;
+
+	/* Note: This filter always uses an external program, so we
+	 * return "warn" to inform of the fact. */
+	archive_set_error(_a, ARCHIVE_ERRNO_MISC,
+	    "Using external lzop program for lzop compression");
+	return (ARCHIVE_WARN);
+}
+
+static int
+archive_write_lzop_options(struct archive_write_filter *f, const char *key,
+    const char *value)
+{
+	struct write_lzop *data = (struct write_lzop *)f->data;
+
+	if (strcmp(key, "compression-level") == 0) {
+		if (value == NULL || !(value[0] >= '1' && value[0] <= '9') ||
+		    value[1] != '\0')
+			return (ARCHIVE_WARN);
+		data->compression_level = value[0] - '0';
+		return (ARCHIVE_OK);
+	}
+	/* Note: The "warn" return is just to inform the options
+	 * supervisor that we didn't handle it.  It will generate
+	 * a suitable error if no one used this option. */
+	return (ARCHIVE_WARN);
+}
+
+static int
+archive_write_lzop_open(struct archive_write_filter *f)
+{
+	struct write_lzop *data = (struct write_lzop *)f->data;
+	struct archive_string as;
 	int r;
 
-	r = __archive_write_programv(a, "lzop", ARCHIVE_FILTER_LZOP,
-		"lzop", argv);
-	/* Return ARCHIVE_WARN since this always uses an external program. */
-	if (r == ARCHIVE_OK)
-		r = ARCHIVE_WARN;
+	archive_string_init(&as);
+	archive_strcpy(&as, "lzop");
+	/* Specify compression level. */
+	if (data->compression_level > 0) {
+		archive_strappend_char(&as, '-');
+		archive_strappend_char(&as, '0' + data->compression_level);
+	}
+	r = __archive_write_program_set_cmd(data->pdata, as.s);
+	if (r != ARCHIVE_OK)
+		goto memerr;
+	archive_string_free(&as);
+
+	r = __archive_write_program_open(f, data->pdata);
 	return (r);
+memerr:
+	archive_string_free(&as);
+	archive_set_error(f->archive, ENOMEM, "Can't allocate memory");
+	return (ARCHIVE_FATAL);
+}
+
+static int
+archive_write_lzop_write(struct archive_write_filter *f,
+    const void *buff, size_t length)
+{
+	struct write_lzop *data = (struct write_lzop *)f->data;
+
+	return __archive_write_program_write(f, data->pdata, buff, length);
+}
+
+static int
+archive_write_lzop_close(struct archive_write_filter *f)
+{
+	struct write_lzop *data = (struct write_lzop *)f->data;
+
+	return __archive_write_program_close(f, data->pdata);
+}
+
+static int
+archive_write_lzop_free(struct archive_write_filter *f)
+{
+	struct write_lzop *data = (struct write_lzop *)f->data;
+
+	__archive_write_program_free(data->pdata);
+	free(data);
+	return (ARCHIVE_OK);
 }

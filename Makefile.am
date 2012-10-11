@@ -93,6 +93,8 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_acl.c				\
 	libarchive/archive_acl_private.h			\
 	libarchive/archive_check_magic.c			\
+	libarchive/archive_cmdline.c				\
+	libarchive/archive_cmdline_private.h			\
 	libarchive/archive_crc32.h				\
 	libarchive/archive_crypto.c				\
 	libarchive/archive_crypto_private.h			\
@@ -280,6 +282,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_acl_posix1e.c			\
 	libarchive/test/test_archive_api_feature.c		\
 	libarchive/test/test_archive_clear_error.c		\
+	libarchive/test/test_archive_cmdline.c			\
 	libarchive/test/test_archive_crypto.c			\
 	libarchive/test/test_archive_getdate.c			\
 	libarchive/test/test_archive_match_owner.c		\

@@ -1858,36 +1858,6 @@ canBunzip2(void)
 }
 
 /*
- * Can this platform run the gzip program?
- */
-int
-canGzip(void)
-{
-	static int tested = 0, value = 0;
-	if (!tested) {
-		tested = 1;
-		if (systemf("gzip -V %s", redirectArgs) == 0)
-			value = 1;
-	}
-	return (value);
-}
-
-/*
- * Can this platform run the gunzip program?
- */
-int
-canGunzip(void)
-{
-	static int tested = 0, value = 0;
-	if (!tested) {
-		tested = 1;
-		if (systemf("gunzip -V %s", redirectArgs) == 0)
-			value = 1;
-	}
-	return (value);
-}
-
-/*
  * Can this platform run the grzip program?
  */
 int
@@ -1897,6 +1867,21 @@ canGrzip(void)
 	if (!tested) {
 		tested = 1;
 		if (systemf("grzip -V %s", redirectArgs) == 0)
+			value = 1;
+	}
+	return (value);
+}
+
+/*
+ * Can this platform run the gzip program?
+ */
+int
+canGzip(void)
+{
+	static int tested = 0, value = 0;
+	if (!tested) {
+		tested = 1;
+		if (systemf("gzip -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);

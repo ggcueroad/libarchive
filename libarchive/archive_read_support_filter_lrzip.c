@@ -78,6 +78,8 @@ archive_read_support_filter_lrzip(struct archive *_a)
 	reader->options = NULL;
 	reader->free = lrzip_reader_free;
 	/* This filter always uses an external program. */
+	archive_set_error(_a, ARCHIVE_ERRNO_MISC,
+	    "Using external lrzip program for lrzip decompression");
 	return (ARCHIVE_WARN);
 }
 
@@ -119,8 +121,8 @@ lrzip_bidder_init(struct archive_read_filter *self)
 {
 	int r;
 
-	r = __archive_read_programl(self, "lrzip", "lrzip", "-q", "-d", NULL);
-	/* Note: We set the format here even if __archive_read_programl()
+	r = __archive_read_program(self, "lrzip -d -q");
+	/* Note: We set the format here even if __archive_read_program()
 	 * above fails.  We do, after all, know what the format is
 	 * even if we weren't able to read it. */
 	self->code = ARCHIVE_FILTER_LRZIP;
