@@ -40,9 +40,8 @@ DEFINE_TEST(test_option_z)
 	p = slurpfile(&s, "archive.err");
 	p[s] = '\0';
 	if (r != 0) {
-		if (strstr(p, "Unsupported compression option") != NULL) {
-			skipping("This version of bsdpax was compiled "
-			    "without gzip support");
+		if (!canGzip()) {
+			skipping("gzip is not supported on this platform");
 			return;
 		}
 		failure("-z option is broken");
