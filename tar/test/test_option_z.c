@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2003-2007 Tim Kientzle
+ * Copyright (c) 2012 Michihiro NAKAJIMA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,8 +36,7 @@ DEFINE_TEST(test_option_z)
 	assertMakeFile("f", 0644, "a");
 
 	/* Archive it with gzip compression. */
-	r = systemf("echo f | %s -oz >archive.out 2>archive.err",
-	    testprog);
+	r = systemf("%s -zcf archive.out f 2>archive.err", testprog);
 	p = slurpfile(&s, "archive.err");
 	p[s] = '\0';
 	if (r != 0) {

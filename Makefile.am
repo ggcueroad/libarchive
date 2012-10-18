@@ -744,6 +744,7 @@ bsdtar_test_SOURCES=						\
 	tar/test/test_option_exclude.c				\
 	tar/test/test_option_gid_gname.c			\
 	tar/test/test_option_grzip.c				\
+	tar/test/test_option_j.c				\
 	tar/test/test_option_k.c				\
 	tar/test/test_option_keep_newer_files.c			\
 	tar/test/test_option_lrzip.c				\
@@ -759,6 +760,7 @@ bsdtar_test_SOURCES=						\
 	tar/test/test_option_uid_uname.c			\
 	tar/test/test_option_uuencode.c				\
 	tar/test/test_option_xz.c				\
+	tar/test/test_option_z.c				\
 	tar/test/test_patterns.c				\
 	tar/test/test_print_longpath.c				\
 	tar/test/test_stdio.c					\

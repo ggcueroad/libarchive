@@ -32,7 +32,7 @@ DEFINE_TEST(test_extract_cpio_lz)
 
 	extract_reference_file(reffile);
 	f = systemf("%s -it < %s >test.out 2>test.err", testprog, reffile);
-	if (f == 0 || canLunzip()) {
+	if (f == 0 || canLzip()) {
 		assertEqualInt(0, systemf("%s -i < %s >test.out 2>test.err",
 		    testprog, reffile));
 
@@ -43,6 +43,6 @@ DEFINE_TEST(test_extract_cpio_lz)
 		assertEmptyFile("test.out");
 		assertTextFileContents("1 block\n", "test.err");
 	} else {
-		skipping("It seems lzma is not supported on this platform");
+		skipping("It seems lzip is not supported on this platform");
 	}
 }

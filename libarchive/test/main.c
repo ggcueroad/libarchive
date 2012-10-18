@@ -1841,15 +1841,15 @@ static const char *redirectArgs = ">NUL 2>NUL"; /* Win32 cmd.exe */
 static const char *redirectArgs = ">/dev/null 2>/dev/null"; /* POSIX 'sh' */
 #endif
 /*
- * Can this platform run the bunzip2 program?
+ * Can this platform run the bzip2 program?
  */
 int
-canBunzip2(void)
+canBzip2(void)
 {
 	static int tested = 0, value = 0;
 	if (!tested) {
 		tested = 1;
-		if (systemf("bunzip2 -V %s", redirectArgs) == 0)
+		if (systemf("bzip2 -d -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);
@@ -1901,30 +1901,30 @@ canLrzip(void)
 }
 
 /*
- * Can this platform run the lunzip program?
+ * Can this platform run the lzip program?
  */
 int
-canLunzip(void)
+canLzip(void)
 {
 	static int tested = 0, value = 0;
 	if (!tested) {
 		tested = 1;
-		if (systemf("lunzip -V %s", redirectArgs) == 0)
+		if (systemf("lzip -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);
 }
 
 /*
- * Can this platform run the unlzma program?
+ * Can this platform run the lzma program?
  */
 int
-canUnlzma(void)
+canLzma(void)
 {
 	static int tested = 0, value = 0;
 	if (!tested) {
 		tested = 1;
-		if (systemf("unlzma -V %s", redirectArgs) == 0)
+		if (systemf("lzma -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);
@@ -1946,15 +1946,15 @@ canLzop(void)
 }
 
 /*
- * Can this platform run the unxz program?
+ * Can this platform run the xz program?
  */
 int
-canUnxz(void)
+canXz(void)
 {
 	static int tested = 0, value = 0;
 	if (!tested) {
 		tested = 1;
-		if (systemf("unxz -V %s", redirectArgs) == 0)
+		if (systemf("xz -V %s", redirectArgs) == 0)
 			value = 1;
 	}
 	return (value);

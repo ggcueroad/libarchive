@@ -266,8 +266,8 @@ void sleepUntilAfter(time_t);
 /* Return true if this platform can create symlinks. */
 int canSymlink(void);
 
-/* Return true if this platform can run the "bunzip2" program. */
-int canBunzip2(void);
+/* Return true if this platform can run the "bzip2" program. */
+int canBzip2(void);
 
 /* Return true if this platform can run the "grzip" program. */
 int canGrzip(void);
@@ -278,17 +278,17 @@ int canGzip(void);
 /* Return true if this platform can run the "lrzip" program. */
 int canLrzip(void);
 
-/* Return true if this platform can run the "lunzip" program. */
-int canLunzip(void);
+/* Return true if this platform can run the "lzip" program. */
+int canLzip(void);
 
-/* Return true if this platform can run the "unlzma" program. */
-int canUnlzma(void);
+/* Return true if this platform can run the "lzma" program. */
+int canLzma(void);
 
 /* Return true if this platform can run the "lzop" program. */
 int canLzop(void);
 
-/* Return true if this platform can run the "unxz" program. */
-int canUnxz(void);
+/* Return true if this platform can run the "xz" program. */
+int canXz(void);
 
 /* Return true if this filesystem can handle nodump flags. */
 int canNodump(void);

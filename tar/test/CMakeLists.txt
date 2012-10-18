@@ -35,6 +35,7 @@ IF(ENABLE_TAR AND ENABLE_TEST)
     test_option_exclude.c
     test_option_gid_gname.c
     test_option_grzip.c
+    test_option_j.c
     test_option_k.c
     test_option_keep_newer_files.c
     test_option_lrzip.c
@@ -50,6 +51,7 @@ IF(ENABLE_TAR AND ENABLE_TEST)
     test_option_uid_uname.c
     test_option_uuencode.c
     test_option_xz.c
+    test_option_z.c
     test_patterns.c
     test_print_longpath.c
     test_stdio.c
