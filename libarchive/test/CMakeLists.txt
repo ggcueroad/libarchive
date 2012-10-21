@@ -49,6 +49,7 @@ IF(ENABLE_TEST)
     test_compat_gzip.c
     test_compat_lzip.c
     test_compat_lzma.c
+    test_compat_lzop.c
     test_compat_mac.c
     test_compat_pax_libarchive_2x.c
     test_compat_solaris_tar_acl.c
@@ -79,6 +80,7 @@ IF(ENABLE_TEST)
     test_read_filter_grzip.c
     test_read_filter_lrzip.c
     test_read_filter_lzop.c
+    test_read_filter_lzop_multiple_parts.c
     test_read_filter_program.c
     test_read_filter_program_signature.c
     test_read_filter_uudecode.c
@@ -179,13 +181,19 @@ IF(ENABLE_TEST)
     test_write_format_iso9660_filename.c
     test_write_format_iso9660_zisofs.c
     test_write_format_mtree.c
+    test_write_format_mtree_absolute_path.c
+    test_write_format_mtree_classic.c
+    test_write_format_mtree_classic_indent.c
     test_write_format_mtree_fflags.c
+    test_write_format_mtree_no_separator.c
+    test_write_format_mtree_quoted_filename.c
     test_write_format_pax.c
     test_write_format_shar_empty.c
     test_write_format_tar.c
     test_write_format_tar_empty.c
     test_write_format_tar_sparse.c
     test_write_format_tar_ustar.c
+    test_write_format_tar_v7tar.c
     test_write_format_xar.c
     test_write_format_xar_empty.c
     test_write_format_zip.c
