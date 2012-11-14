@@ -137,10 +137,73 @@ seek_file(int fd, int64_t offset, int whence)
 #define	lseek seek_file
 #endif
 
+static void
+set_writer_options(struct bsdtar *bsdtar, struct archive *a)
+{
+	const char *writer_options;
+	int r;
+
+	writer_options = getenv(ENV_WRITER_OPTIONS);
+	if (writer_options != NULL) {
+		char *p;
+		/* Set default write options. */
+		p = malloc(sizeof(IGNORE_WRONG_MODULE_NAME)
+		    + strlen(writer_options) + 1);
+		if (p == NULL)
+			lafe_errc(1, errno, "Out of memory");
+		/* Prepend magic code to ignore options for
+		 * a format or filters which are not added to
+		 * the archive write object. */
+		strncpy(p, IGNORE_WRONG_MODULE_NAME,
+		    sizeof(IGNORE_WRONG_MODULE_NAME) -1);
+		strcpy(p + sizeof(IGNORE_WRONG_MODULE_NAME) -1, writer_options);
+		r = archive_write_set_options(a, p);
+		free(p);
+		if (r < ARCHIVE_WARN)
+			lafe_errc(1, 0, "%s", archive_error_string(a));
+		else
+			archive_clear_error(a);
+	}
+	if (ARCHIVE_OK != archive_write_set_options(a, bsdtar->option_options))
+		lafe_errc(1, 0, "%s", archive_error_string(a));
+}
+
+static void
+set_reader_options(struct bsdtar *bsdtar, struct archive *a)
+{
+	const char *reader_options;
+	int r;
+
+	(void)bsdtar; /* UNUSED */
+
+	reader_options = getenv(ENV_READER_OPTIONS);
+	if (reader_options != NULL) {
+		char *p;
+		/* Set default write options. */
+		p = malloc(sizeof(IGNORE_WRONG_MODULE_NAME)
+		    + strlen(reader_options) + 1);
+		if (p == NULL)
+			lafe_errc(1, errno, "Out of memory");
+		/* Prepend magic code to ignore options for
+		 * a format or filters which are not added to
+		 * the archive write object. */
+		strncpy(p, IGNORE_WRONG_MODULE_NAME,
+		    sizeof(IGNORE_WRONG_MODULE_NAME) -1);
+		strcpy(p + sizeof(IGNORE_WRONG_MODULE_NAME) -1, reader_options);
+		r = archive_read_set_options(a, p);
+		free(p);
+		if (r < ARCHIVE_WARN)
+			lafe_errc(1, 0, "%s", archive_error_string(a));
+		else
+			archive_clear_error(a);
+	}
+}
+
 void
 tar_mode_c(struct bsdtar *bsdtar)
 {
 	struct archive *a;
+	const void *filter_name;
 	int r;
 
 	if (*bsdtar->argv == NULL && bsdtar->names_from_file == NULL)
@@ -149,15 +212,16 @@ tar_mode_c(struct bsdtar *bsdtar)
 	a = archive_write_new();
 
 	/* Support any format that the library supports. */
-	if (bsdtar->create_format == NULL) {
+	if (cset_get_format(bsdtar->cset) == NULL) {
 		r = archive_write_set_format_pax_restricted(a);
-		bsdtar->create_format = "pax restricted";
+		cset_set_format(bsdtar->cset, "pax restricted");
 	} else {
-		r = archive_write_set_format_by_name(a, bsdtar->create_format);
+		r = archive_write_set_format_by_name(a,
+			cset_get_format(bsdtar->cset));
 	}
 	if (r != ARCHIVE_OK) {
 		fprintf(stderr, "Can't use format %s: %s\n",
-		    bsdtar->create_format,
+		    cset_get_format(bsdtar->cset),
 		    archive_error_string(a));
 		usage();
 	}
@@ -165,77 +229,13 @@ tar_mode_c(struct bsdtar *bsdtar)
 	archive_write_set_bytes_per_block(a, bsdtar->bytes_per_block);
 	archive_write_set_bytes_in_last_block(a, bsdtar->bytes_in_last_block);
 
-	if (bsdtar->compress_program) {
-		archive_write_add_filter_program(a, bsdtar->compress_program);
-	} else {
-		const char *name = "?";
-
-		switch (bsdtar->create_compression) {
-		case 0:
-			r = ARCHIVE_OK;
-			break;
-		case OPTION_GRZIP:
-			r = archive_write_add_filter_grzip(a);
-			break;
-		case 'j': case 'y':
-			r = archive_write_add_filter_bzip2(a);
-			break;
-		case 'J':
-			r = archive_write_add_filter_xz(a);
-			break;
-		case OPTION_LRZIP:
-			r = archive_write_add_filter_lrzip(a);
-			break;
-		case OPTION_LZIP:
-			r = archive_write_add_filter_lzip(a);
-			break;
-		case OPTION_LZMA:
-			r = archive_write_add_filter_lzma(a);
-			break;
-		case OPTION_LZOP:
-			r = archive_write_add_filter_lzop(a);
-			break;
-		case 'z':
-			r = archive_write_add_filter_gzip(a);
-			break;
-		case 'Z':
-			r = archive_write_add_filter_compress(a);
-			break;
-		default:
-			lafe_errc(1, 0,
-			    "Unrecognized compression option -%c",
-			    bsdtar->create_compression);
-		}
-		if (r < ARCHIVE_WARN) {
-			lafe_errc(1, 0,
-			    "Unsupported compression option -%c",
-			    bsdtar->create_compression);
-		}
-		switch (bsdtar->add_filter) {
-		case 0:
-			r = ARCHIVE_OK;
-			break;
-		case OPTION_B64ENCODE:
-			r = archive_write_add_filter_b64encode(a);
-			name = "b64encode";
-			break;
-		case OPTION_UUENCODE:
-			r = archive_write_add_filter_uuencode(a);
-			name = "uuencode";
-			break;
-		default:
-			lafe_errc(1, 0,
-			    "Unrecognized compression option -%c",
-			    bsdtar->add_filter);
-		}
-		if (r < ARCHIVE_WARN) {
-			lafe_errc(1, 0,
-			    "Unsupported filter option --%s", name);
-		}
+	r = cset_write_add_filters(bsdtar->cset, a, &filter_name);
+	if (r < ARCHIVE_WARN) {
+		lafe_errc(1, 0, "Unsupported compression option --%s",
+		    (const char *)filter_name);
 	}
 
-	if (ARCHIVE_OK != archive_write_set_options(a, bsdtar->option_options))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
+	set_writer_options(bsdtar, a);
 	if (ARCHIVE_OK != archive_write_open_filename(a, bsdtar->filename))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 	write_archive(a, bsdtar);
@@ -273,6 +273,7 @@ tar_mode_r(struct bsdtar *bsdtar)
 	archive_read_support_format_empty(a);
 	archive_read_support_format_tar(a);
 	archive_read_support_format_gnutar(a);
+	set_reader_options(bsdtar, a);
 	r = archive_read_open_fd(a, bsdtar->fd, 10240);
 	if (r != ARCHIVE_OK)
 		lafe_errc(1, archive_errno(a),
@@ -302,17 +303,17 @@ tar_mode_r(struct bsdtar *bsdtar)
 	 * of arcane ugliness.
 	 */
 
-	if (bsdtar->create_format != NULL) {
+	if (cset_get_format(bsdtar->cset) != NULL) {
 		/* If the user requested a format, use that, but ... */
 		archive_write_set_format_by_name(a,
-		    bsdtar->create_format);
+		    cset_get_format(bsdtar->cset));
 		/* ... complain if it's not compatible. */
 		format &= ARCHIVE_FORMAT_BASE_MASK;
 		if (format != (int)(archive_format(a) & ARCHIVE_FORMAT_BASE_MASK)
 		    && format != ARCHIVE_FORMAT_EMPTY) {
 			lafe_errc(1, 0,
 			    "Format %s is incompatible with the archive %s.",
-			    bsdtar->create_format, bsdtar->filename);
+			    cset_get_format(bsdtar->cset), bsdtar->filename);
 		}
 	} else {
 		/*
@@ -325,8 +326,7 @@ tar_mode_r(struct bsdtar *bsdtar)
 	}
 	if (lseek(bsdtar->fd, end_offset, SEEK_SET) < 0)
 		lafe_errc(1, errno, "Could not seek to archive end");
-	if (ARCHIVE_OK != archive_write_set_options(a, bsdtar->option_options))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
+	set_writer_options(bsdtar, a);
 	if (ARCHIVE_OK != archive_write_open_fd(a, bsdtar->fd))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 
@@ -363,6 +363,7 @@ tar_mode_u(struct bsdtar *bsdtar)
 	archive_read_support_filter_all(a);
 	archive_read_support_format_tar(a);
 	archive_read_support_format_gnutar(a);
+	set_reader_options(bsdtar, a);
 	if (archive_read_open_fd(a, bsdtar->fd, bsdtar->bytes_per_block)
 	    != ARCHIVE_OK) {
 		lafe_errc(1, 0,
@@ -402,8 +403,7 @@ tar_mode_u(struct bsdtar *bsdtar)
 
 	if (lseek(bsdtar->fd, end_offset, SEEK_SET) < 0)
 		lafe_errc(1, errno, "Could not seek to archive end");
-	if (ARCHIVE_OK != archive_write_set_options(a, bsdtar->option_options))
-		lafe_errc(1, 0, "%s", archive_error_string(a));
+	set_writer_options(bsdtar, a);
 	if (ARCHIVE_OK != archive_write_open_fd(a, bsdtar->fd))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 
@@ -647,6 +647,7 @@ append_archive_filename(struct bsdtar *bsdtar, struct archive *a,
 	ina = archive_read_new();
 	archive_read_support_format_all(ina);
 	archive_read_support_filter_all(ina);
+	set_reader_options(bsdtar, a);
 	if (archive_read_open_filename(ina, filename,
 					bsdtar->bytes_per_block)) {
 		lafe_warnc(0, "%s", archive_error_string(ina));
@@ -1006,10 +1007,6 @@ test_for_append(struct bsdtar *bsdtar)
 		lafe_errc(1, 0, "no files or directories specified");
 	if (bsdtar->filename == NULL)
 		lafe_errc(1, 0, "Cannot append to stdout.");
-
-	if (bsdtar->create_compression != 0)
-		lafe_errc(1, 0,
-		    "Cannot append to %s with compression", bsdtar->filename);
 
 	if (stat(bsdtar->filename, &s) != 0)
 		return;

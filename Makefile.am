@@ -180,6 +180,7 @@ libarchive_la_SOURCES=						\
 	libarchive/archive_write_private.h			\
 	libarchive/archive_write_add_filter.c			\
 	libarchive/archive_write_add_filter_b64encode.c		\
+	libarchive/archive_write_add_filter_by_name.c		\
 	libarchive/archive_write_add_filter_bzip2.c		\
 	libarchive/archive_write_add_filter_compress.c		\
 	libarchive/archive_write_add_filter_grzip.c		\
@@ -404,7 +405,9 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_read_format_ustar_filename.c	\
 	libarchive/test/test_read_format_xar.c			\
 	libarchive/test/test_read_format_zip.c			\
+	libarchive/test/test_read_format_zip_comment_stored.c	\
 	libarchive/test/test_read_format_zip_filename.c		\
+	libarchive/test/test_read_format_zip_mac_metadata.c	\
 	libarchive/test/test_read_large.c			\
 	libarchive/test/test_read_pax_truncated.c		\
 	libarchive/test/test_read_position.c			\
@@ -416,9 +419,13 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_ustar_filenames.c			\
 	libarchive/test/test_ustar_filename_encoding.c		\
 	libarchive/test/test_write_disk.c			\
+	libarchive/test/test_write_disk_appledouble.c		\
 	libarchive/test/test_write_disk_failures.c		\
 	libarchive/test/test_write_disk_hardlink.c		\
+	libarchive/test/test_write_disk_hfs_compression.c	\
 	libarchive/test/test_write_disk_lookup.c		\
+	libarchive/test/test_write_disk_mac_metadata.c		\
+	libarchive/test/test_write_disk_no_hfs_compression.c	\
 	libarchive/test/test_write_disk_perms.c			\
 	libarchive/test/test_write_disk_secure.c		\
 	libarchive/test/test_write_disk_sparse.c		\
@@ -428,6 +435,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_filter_bzip2.c		\
 	libarchive/test/test_write_filter_compress.c		\
 	libarchive/test/test_write_filter_gzip.c		\
+	libarchive/test/test_write_filter_gzip_timestamp.c	\
 	libarchive/test/test_write_filter_lrzip.c		\
 	libarchive/test/test_write_filter_lzip.c		\
 	libarchive/test/test_write_filter_lzma.c		\
@@ -630,6 +638,8 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_ustar_filename_eucjp.tar.Z.uu	\
 	libarchive/test/test_read_format_ustar_filename_koi8r.tar.Z.uu	\
 	libarchive/test/test_read_format_zip.zip.uu			\
+	libarchive/test/test_read_format_zip_comment_stored_1.zip.uu	\
+	libarchive/test/test_read_format_zip_comment_stored_2.zip.uu	\
 	libarchive/test/test_read_format_zip_filename_cp866.zip.uu	\
 	libarchive/test/test_read_format_zip_filename_cp932.zip.uu	\
 	libarchive/test/test_read_format_zip_filename_koi8r.zip.uu	\
@@ -637,6 +647,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_zip_filename_utf8_ru2.zip.uu	\
 	libarchive/test/test_read_format_zip_filename_utf8_ru.zip.uu	\
 	libarchive/test/test_read_format_zip_length_at_end.zip.uu	\
+	libarchive/test/test_read_format_zip_mac_metadata.zip.uu	\
 	libarchive/test/test_read_format_zip_symlink.zip.uu		\
 	libarchive/test/test_read_format_zip_ux.zip.uu			\
 	libarchive/test/test_read_large_splitted_rar_aa.uu		\
@@ -651,6 +662,10 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_splitted_rar_seek_support_aa.uu		\
 	libarchive/test/test_splitted_rar_seek_support_ab.uu		\
 	libarchive/test/test_splitted_rar_seek_support_ac.uu		\
+	libarchive/test/test_write_disk_hfs_appledouble.cpio.gz.uu	\
+	libarchive/test/test_write_disk_hfs_compression.tgz.uu		\
+	libarchive/test/test_write_disk_mac_metaata.tar.gz.uu		\
+	libarchive/test/test_write_disk_no_hfs_compression.tgz.uu	\
 	libarchive/test/CMakeLists.txt					\
 	libarchive/test/README
 
@@ -676,6 +691,7 @@ bsdtar_SOURCES=				\
 		tar/bsdtar.h		\
 		tar/bsdtar_platform.h	\
 		tar/cmdline.c		\
+		tar/creation_set.c	\
 		tar/read.c		\
 		tar/subst.c		\
 		tar/util.c		\
@@ -747,6 +763,7 @@ bsdtar_test_SOURCES=						\
 	tar/test/test_option_T_upper.c				\
 	tar/test/test_option_U_upper.c				\
 	tar/test/test_option_X_upper.c				\
+	tar/test/test_option_a.c				\
 	tar/test/test_option_b.c				\
 	tar/test/test_option_b64encode.c			\
 	tar/test/test_option_exclude.c				\

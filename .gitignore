@@ -85,3 +85,5 @@ Testing/
 libarchive/libarchive.a
 libarchive/libarchive.so
 libarchive/libarchive.so.*
+
+.DS_Store

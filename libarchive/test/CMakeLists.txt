@@ -137,7 +137,9 @@ IF(ENABLE_TEST)
     test_read_format_ustar_filename.c
     test_read_format_xar.c
     test_read_format_zip.c
+    test_read_format_zip_comment_stored.c
     test_read_format_zip_filename.c
+    test_read_format_zip_mac_metadata.c
     test_read_large.c
     test_read_pax_truncated.c
     test_read_position.c
@@ -149,9 +151,13 @@ IF(ENABLE_TEST)
     test_ustar_filenames.c
     test_ustar_filename_encoding.c
     test_write_disk.c
+    test_write_disk_appledouble.c
     test_write_disk_failures.c
     test_write_disk_hardlink.c
+    test_write_disk_hfs_compression.c
     test_write_disk_lookup.c
+    test_write_disk_mac_metadata.c
+    test_write_disk_no_hfs_compression.c
     test_write_disk_perms.c
     test_write_disk_secure.c
     test_write_disk_sparse.c
@@ -161,6 +167,7 @@ IF(ENABLE_TEST)
     test_write_filter_bzip2.c
     test_write_filter_compress.c
     test_write_filter_gzip.c
+    test_write_filter_gzip_timestamp.c
     test_write_filter_lrzip.c
     test_write_filter_lzip.c
     test_write_filter_lzma.c

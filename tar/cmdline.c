@@ -47,7 +47,7 @@ __FBSDID("$FreeBSD$");
  * Short options for tar.  Please keep this sorted.
  */
 static const char *short_options
-	= "Bb:C:cf:HhI:JjkLlmnOoPpqrSs:T:tUuvW:wX:xyZz";
+	= "aBb:C:cf:HhI:JjkLlmnOoPpqrSs:T:tUuvW:wX:xyZz";
 
 /*
  * Long options for tar.  Please keep this list sorted.
@@ -65,6 +65,7 @@ static const struct bsdtar_option {
 } tar_longopts[] = {
 	{ "absolute-paths",       0, 'P' },
 	{ "append",               0, 'r' },
+	{ "auto-compress",        0, 'a' },
 	{ "b64encode",            0, OPTION_B64ENCODE },
 	{ "block-size",           1, 'b' },
 	{ "bunzip2",              0, 'j' },
@@ -92,6 +93,7 @@ static const struct bsdtar_option {
 	{ "gunzip",               0, 'z' },
 	{ "gzip",                 0, 'z' },
 	{ "help",                 0, OPTION_HELP },
+	{ "hfsCompression",       0, OPTION_HFS_COMPRESSION },
 	{ "include",              1, OPTION_INCLUDE },
 	{ "insecure",             0, 'P' },
 	{ "interactive",          0, 'w' },
@@ -113,6 +115,7 @@ static const struct bsdtar_option {
 	{ "no-same-owner",	  0, OPTION_NO_SAME_OWNER },
 	{ "no-same-permissions",  0, OPTION_NO_SAME_PERMISSIONS },
 	{ "nodump",               0, OPTION_NODUMP },
+	{ "nopreserveHFSCompression",0, OPTION_NOPRESERVE_HFS_COMPRESSION },
 	{ "norecurse",            0, 'n' },
 	{ "null",		  0, OPTION_NULL },
 	{ "numeric-owner",	  0, OPTION_NUMERIC_OWNER },
