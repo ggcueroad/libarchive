@@ -642,6 +642,7 @@ bsdpax_entry_fprintf(struct bsdpax_options *bsdpax_opt, FILE *f,
 				str = archive_entry_uname(entry);
 				if (str != NULL)
 					break;
+				str = tmp;
 				/* FALL THROUGH */
 			case P_UID:
 				sprintf(tmp, "%s",
@@ -652,6 +653,7 @@ bsdpax_entry_fprintf(struct bsdpax_options *bsdpax_opt, FILE *f,
 				str = archive_entry_gname(entry);
 				if (str != NULL)
 					break;
+				str = tmp;
 				/* FALL THROUGH */
 			case P_GID:
 				sprintf(tmp, "%s",
