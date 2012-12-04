@@ -408,6 +408,7 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_read_format_zip_comment_stored.c	\
 	libarchive/test/test_read_format_zip_filename.c		\
 	libarchive/test/test_read_format_zip_mac_metadata.c	\
+	libarchive/test/test_read_format_zip_sfx.c		\
 	libarchive/test/test_read_large.c			\
 	libarchive/test/test_read_pax_truncated.c		\
 	libarchive/test/test_read_position.c			\
@@ -444,6 +445,8 @@ libarchive_test_SOURCES=					\
 	libarchive/test/test_write_filter_uuencode.c		\
 	libarchive/test/test_write_filter_xz.c			\
 	libarchive/test/test_write_format_7zip.c		\
+	libarchive/test/test_write_format_7zip_empty.c		\
+	libarchive/test/test_write_format_7zip_large.c		\
 	libarchive/test/test_write_format_ar.c			\
 	libarchive/test/test_write_format_cpio.c		\
 	libarchive/test/test_write_format_cpio_empty.c		\
@@ -648,6 +651,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_zip_filename_utf8_ru.zip.uu	\
 	libarchive/test/test_read_format_zip_length_at_end.zip.uu	\
 	libarchive/test/test_read_format_zip_mac_metadata.zip.uu	\
+	libarchive/test/test_read_format_zip_sfx.uu			\
 	libarchive/test/test_read_format_zip_symlink.zip.uu		\
 	libarchive/test/test_read_format_zip_ux.zip.uu			\
 	libarchive/test/test_read_large_splitted_rar_aa.uu		\

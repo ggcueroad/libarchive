@@ -140,6 +140,7 @@ IF(ENABLE_TEST)
     test_read_format_zip_comment_stored.c
     test_read_format_zip_filename.c
     test_read_format_zip_mac_metadata.c
+    test_read_format_zip_sfx.c
     test_read_large.c
     test_read_pax_truncated.c
     test_read_position.c
@@ -176,6 +177,8 @@ IF(ENABLE_TEST)
     test_write_filter_uuencode.c
     test_write_filter_xz.c
     test_write_format_7zip.c
+    test_write_format_7zip_empty.c
+    test_write_format_7zip_large.c
     test_write_format_ar.c
     test_write_format_cpio.c
     test_write_format_cpio_empty.c
