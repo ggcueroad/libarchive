@@ -25,15 +25,13 @@
 #include "test.h"
 __FBSDID("$FreeBSD$");
 
-DEFINE_TEST(test_extract_pax_bz2)
+DEFINE_TEST(test_extract_tar_grz)
 {
-	const char *reffile = "test_extract.pax.bz2";
-	int f;
+	const char *reffile = "test_extract.tar.grz";
 
 	extract_reference_file(reffile);
-	f = systemf("%s < %s >test.out 2>test.err", testprog, reffile);
-	if (f == 0 || canBzip2()) {
-		assertEqualInt(0, systemf("%s -rf %s >test.out 2>test.err",
+	if (canGrzip()) {
+		assertEqualInt(0, systemf("%s -r < %s >test.out 2>test.err",
 		    testprog, reffile));
 
 		assertFileExists("file1");
@@ -43,6 +41,6 @@ DEFINE_TEST(test_extract_pax_bz2)
 		assertEmptyFile("test.out");
 		assertEmptyFile("test.err");
 	} else {
-		skipping("It seems bzip2 is not supported on this platform");
+		skipping("It seems grzip is not supported on this platform");
 	}
 }

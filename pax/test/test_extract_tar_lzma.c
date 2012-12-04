@@ -25,18 +25,24 @@
 #include "test.h"
 __FBSDID("$FreeBSD$");
 
-DEFINE_TEST(test_extract_pax_Z)
+DEFINE_TEST(test_extract_tar_lzma)
 {
-	const char *reffile = "test_extract.pax.Z";
+	const char *reffile = "test_extract.tar.lzma";
+	int f;
 
 	extract_reference_file(reffile);
-	assertEqualInt(0, systemf("%s -rf %s >test.out 2>test.err",
-	    testprog, reffile));
+	f = systemf("%s < %s >test.out 2>test.err", testprog, reffile);
+	if (f == 0 || canLzma()) {
+		assertEqualInt(0, systemf("%s -rf %s >test.out 2>test.err",
+		    testprog, reffile));
 
-	assertFileExists("file1");
-	assertTextFileContents("contents of file1.\n", "file1");
-	assertFileExists("file2");
-	assertTextFileContents("contents of file2.\n", "file2");
-	assertEmptyFile("test.out");
-	assertEmptyFile("test.err");
+		assertFileExists("file1");
+		assertTextFileContents("contents of file1.\n", "file1");
+		assertFileExists("file2");
+		assertTextFileContents("contents of file2.\n", "file2");
+		assertEmptyFile("test.out");
+		assertEmptyFile("test.err");
+	} else {
+		skipping("It seems lzma is not supported on this platform");
+	}
 }

@@ -61,7 +61,7 @@
  * suites share one copy of this file.
  */
 __FBSDID("$FreeBSD$");
-#define KNOWNREF	"test_option_T_upper.pax.uu"
+#define KNOWNREF	"test_option_T_upper.tar.uu"
 #define ENVBASE "BSDPAX"  /* Prefix for environment variables. */
 #define	PROGRAM "bsdpax"  /* Name of program being tested. */
 #define PROGRAM_ALIAS "pax" /* Generic alias for program */

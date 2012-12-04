@@ -25,9 +25,9 @@
 #include "test.h"
 __FBSDID("$FreeBSD$");
 
-DEFINE_TEST(test_extract_pax_gz)
+DEFINE_TEST(test_extract_tar_gz)
 {
-	const char *reffile = "test_extract.pax.gz";
+	const char *reffile = "test_extract.tar.gz";
 	int f;
 
 	extract_reference_file(reffile);

@@ -1046,15 +1046,15 @@ bsdpax_test_SOURCES=						\
 	pax/test/test.h						\
 	pax/test/test_0.c					\
 	pax/test/test_basic.c					\
-	pax/test/test_extract_pax_Z.c				\
-	pax/test/test_extract_pax_bz2.c				\
-	pax/test/test_extract_pax_grz.c				\
-	pax/test/test_extract_pax_gz.c				\
-	pax/test/test_extract_pax_lrz.c				\
-	pax/test/test_extract_pax_lz.c				\
-	pax/test/test_extract_pax_lzma.c			\
-	pax/test/test_extract_pax_lzo.c				\
-	pax/test/test_extract_pax_xz.c				\
+	pax/test/test_extract_tar_Z.c				\
+	pax/test/test_extract_tar_bz2.c				\
+	pax/test/test_extract_tar_grz.c				\
+	pax/test/test_extract_tar_gz.c				\
+	pax/test/test_extract_tar_lrz.c				\
+	pax/test/test_extract_tar_lz.c				\
+	pax/test/test_extract_tar_lzma.c			\
+	pax/test/test_extract_tar_lzo.c				\
+	pax/test/test_extract_tar_xz.c				\
 	pax/test/test_format_newc.c				\
 	pax/test/test_help.c					\
 	pax/test/test_option_D_upper.c				\
@@ -1112,16 +1112,16 @@ endif
 
 bsdpax_test_EXTRA_DIST=			\
 	pax/test/list.h				\
-	pax/test/test_extract.pax.Z.uu		\
-	pax/test/test_extract.pax.bz2.uu	\
-	pax/test/test_extract.pax.grz.uu	\
-	pax/test/test_extract.pax.gz.uu		\
-	pax/test/test_extract.pax.lrz.uu	\
-	pax/test/test_extract.pax.lz.uu		\
-	pax/test/test_extract.pax.lzma.uu	\
-	pax/test/test_extract.pax.lzo.uu	\
-	pax/test/test_extract.pax.xz.uu		\
-	pax/test/test_option_T_upper.pax.uu	\
-	pax/test/test_options_listopt.pax.Z.uu	\
+	pax/test/test_extract.tar.Z.uu		\
+	pax/test/test_extract.tar.bz2.uu	\
+	pax/test/test_extract.tar.grz.uu	\
+	pax/test/test_extract.tar.gz.uu		\
+	pax/test/test_extract.tar.lrz.uu	\
+	pax/test/test_extract.tar.lz.uu		\
+	pax/test/test_extract.tar.lzma.uu	\
+	pax/test/test_extract.tar.lzo.uu	\
+	pax/test/test_extract.tar.xz.uu		\
+	pax/test/test_option_T_upper.tar.uu	\
+	pax/test/test_options_listopt.tar.Z.uu	\
 	pax/test/test_print_longpath.tar.Z.uu	\
 	pax/test/CMakeLists.txt

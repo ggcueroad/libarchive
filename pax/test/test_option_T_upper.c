@@ -60,7 +60,7 @@ t_datestr(const char *str)
 
 DEFINE_TEST(test_option_T_upper)
 {
-	const char *reffile1 = "test_option_T_upper.pax";
+	const char *reffile1 = "test_option_T_upper.tar";
 	int r;
 
 	extract_reference_file(reffile1);

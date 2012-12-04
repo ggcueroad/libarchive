@@ -25,14 +25,14 @@
 #include "test.h"
 __FBSDID("$FreeBSD$");
 
-DEFINE_TEST(test_extract_pax_lrz)
+DEFINE_TEST(test_extract_tar_bz2)
 {
-	const char *reffile = "test_extract.pax.lrz";
+	const char *reffile = "test_extract.tar.bz2";
 	int f;
 
 	extract_reference_file(reffile);
 	f = systemf("%s < %s >test.out 2>test.err", testprog, reffile);
-	if (f == 0 || canLrzip()) {
+	if (f == 0 || canBzip2()) {
 		assertEqualInt(0, systemf("%s -rf %s >test.out 2>test.err",
 		    testprog, reffile));
 
@@ -43,6 +43,6 @@ DEFINE_TEST(test_extract_pax_lrz)
 		assertEmptyFile("test.out");
 		assertEmptyFile("test.err");
 	} else {
-		skipping("It seems lrzip is not supported on this platform");
+		skipping("It seems bzip2 is not supported on this platform");
 	}
 }

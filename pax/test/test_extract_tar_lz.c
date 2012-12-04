@@ -25,14 +25,14 @@
 #include "test.h"
 __FBSDID("$FreeBSD$");
 
-DEFINE_TEST(test_extract_pax_lzo)
+DEFINE_TEST(test_extract_tar_lz)
 {
-	const char *reffile = "test_extract.pax.lzo";
+	const char *reffile = "test_extract.tar.lz";
 	int f;
 
 	extract_reference_file(reffile);
 	f = systemf("%s < %s >test.out 2>test.err", testprog, reffile);
-	if (f == 0 || canLzop()) {
+	if (f == 0 || canLzip()) {
 		assertEqualInt(0, systemf("%s -rf %s >test.out 2>test.err",
 		    testprog, reffile));
 
@@ -43,6 +43,6 @@ DEFINE_TEST(test_extract_pax_lzo)
 		assertEmptyFile("test.out");
 		assertEmptyFile("test.err");
 	} else {
-		skipping("It seems lzop is not supported on this platform");
+		skipping("It seems lzip is not supported on this platform");
 	}
 }

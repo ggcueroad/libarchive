@@ -38,7 +38,7 @@ __FBSDID("$FreeBSD$");
 
 DEFINE_TEST(test_options_listopt)
 {
-	const char *reffile1 = "test_options_listopt.pax.Z";
+	const char *reffile1 = "test_options_listopt.tar.Z";
 
 	extract_reference_file(reffile1);
 

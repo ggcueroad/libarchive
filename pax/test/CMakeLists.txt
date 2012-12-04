@@ -10,15 +10,15 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test.h
     test_0.c
     test_basic.c
-    test_extract_pax_Z.c
-    test_extract_pax_bz2.c
-    test_extract_pax_grz.c
-    test_extract_pax_gz.c
-    test_extract_pax_lrz.c
-    test_extract_pax_lz.c
-    test_extract_pax_lzma.c
-    test_extract_pax_lzo.c
-    test_extract_pax_xz.c
+    test_extract_tar_Z.c
+    test_extract_tar_bz2.c
+    test_extract_tar_grz.c
+    test_extract_tar_gz.c
+    test_extract_tar_lrz.c
+    test_extract_tar_lz.c
+    test_extract_tar_lzma.c
+    test_extract_tar_lzo.c
+    test_extract_tar_xz.c
     test_format_newc.c
     test_help.c
     test_option_D_upper.c
