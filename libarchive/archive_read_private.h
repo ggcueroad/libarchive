@@ -58,6 +58,8 @@ struct archive_read_filter;
 struct archive_read_filter_bidder {
 	/* Configuration data for the bidder. */
 	void *data;
+	/* Name of the filter */
+	const char *name;
 	/* Taste the upstream filter to see if we handle this. */
 	int (*bid)(struct archive_read_filter_bidder *,
 	    struct archive_read_filter *);
@@ -140,6 +142,14 @@ struct archive_read_client {
 	struct archive_read_data_node *dataset;
 };
 
+struct archive_read_extract {
+	struct archive *ad; /* archive_write_disk object */
+
+	/* Progress function invoked during extract. */
+	void			(*extract_progress)(void *);
+	void			 *extract_progress_user_data;
+};
+
 struct archive_read {
 	struct archive	archive;
 
@@ -159,6 +169,14 @@ struct archive_read {
 	int64_t		  read_data_output_offset;
 	size_t		  read_data_remaining;
 
+	/*
+	 * Used by formats/filters to determine the amount of data
+	 * requested from a call to archive_read_data(). This is only
+	 * useful when the format/filter has seek support.
+	 */
+	char		  read_data_is_posix_read;
+	size_t		  read_data_requested;
+
 	/* Callbacks to open/read/write/close client archive streams. */
 	struct archive_read_client client;
 
@@ -167,6 +185,9 @@ struct archive_read {
 
 	/* Last filter in chain */
 	struct archive_read_filter *filter;
+
+	/* Whether to bypass filter bidding process */
+	int bypass_filter_bidding;
 
 	/* File offset of beginning of most recently-read header. */
 	int64_t		  header_position;
@@ -194,26 +215,30 @@ struct archive_read {
 		int	(*read_data_skip)(struct archive_read *);
 		int64_t	(*seek_data)(struct archive_read *, int64_t, int);
 		int	(*cleanup)(struct archive_read *);
+		int	(*format_capabilties)(struct archive_read *);
+		int	(*has_encrypted_entries)(struct archive_read *);
 	}	formats[16];
 	struct archive_format_descriptor	*format; /* Active format. */
 
 	/*
 	 * Various information needed by archive_extract.
 	 */
-	struct extract		 *extract;
+	struct archive_read_extract		*extract;
 	int			(*cleanup_archive_extract)(struct archive_read *);
 };
 
 int	__archive_read_register_format(struct archive_read *a,
-	    void *format_data,
-	    const char *name,
-	    int (*bid)(struct archive_read *, int),
-	    int (*options)(struct archive_read *, const char *, const char *),
-	    int (*read_header)(struct archive_read *, struct archive_entry *),
-	    int (*read_data)(struct archive_read *, const void **, size_t *, int64_t *),
-	    int (*read_data_skip)(struct archive_read *),
-	    int64_t (*seek_data)(struct archive_read *, int64_t, int),
-	    int (*cleanup)(struct archive_read *));
+		void *format_data,
+		const char *name,
+		int (*bid)(struct archive_read *, int),
+		int (*options)(struct archive_read *, const char *, const char *),
+		int (*read_header)(struct archive_read *, struct archive_entry *),
+		int (*read_data)(struct archive_read *, const void **, size_t *, int64_t *),
+		int (*read_data_skip)(struct archive_read *),
+		int64_t (*seek_data)(struct archive_read *, int64_t, int),
+		int (*cleanup)(struct archive_read *),
+		int (*format_capabilities)(struct archive_read *),
+		int (*has_encrypted_entries)(struct archive_read *));
 
 int __archive_read_get_bidder(struct archive_read *a,
     struct archive_read_filter_bidder **bidder);
@@ -226,4 +251,7 @@ int64_t	__archive_read_filter_seek(struct archive_read_filter *, int64_t, int);
 int64_t	__archive_read_consume(struct archive_read *, int64_t);
 int64_t	__archive_read_filter_consume(struct archive_read_filter *, int64_t);
 int __archive_read_program(struct archive_read_filter *, const char *);
+void __archive_read_free_filters(struct archive_read *);
+int  __archive_read_close_filters(struct archive_read *);
+struct archive_read_extract *__archive_read_get_extract(struct archive_read *);
 #endif

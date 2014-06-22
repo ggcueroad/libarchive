@@ -9,8 +9,8 @@ IF(ENABLE_TEST)
    main.c
     read_open_memory.c
     test.h
-    test_acl_freebsd_posix1e.c
     test_acl_freebsd_nfs4.c
+    test_acl_freebsd_posix1e.c
     test_acl_nfs4.c
     test_acl_pax.c
     test_acl_posix1e.c
@@ -38,7 +38,9 @@ IF(ENABLE_TEST)
     test_archive_set_error.c
     test_archive_string.c
     test_archive_string_conversion.c
+    test_archive_write_add_filter_by_name.c
     test_archive_write_set_filter_option.c
+    test_archive_write_set_format_by_name.c
     test_archive_write_set_format_option.c
     test_archive_write_set_option.c
     test_archive_write_set_options.c
@@ -52,8 +54,8 @@ IF(ENABLE_TEST)
     test_compat_lzop.c
     test_compat_mac.c
     test_compat_pax_libarchive_2x.c
-    test_compat_solaris_tar_acl.c
     test_compat_solaris_pax_sparse.c
+    test_compat_solaris_tar_acl.c
     test_compat_tar_hardlink.c
     test_compat_uudecode.c
     test_compat_xz.c
@@ -85,6 +87,9 @@ IF(ENABLE_TEST)
     test_read_filter_program_signature.c
     test_read_filter_uudecode.c
     test_read_format_7zip.c
+    test_read_format_7zip_encryption_data.c
+    test_read_format_7zip_encryption_header.c
+    test_read_format_7zip_encryption_partially.c
     test_read_format_ar.c
     test_read_format_cab.c
     test_read_format_cab_filename.c
@@ -125,9 +130,14 @@ IF(ENABLE_TEST)
     test_read_format_mtree.c
     test_read_format_pax_bz2.c
     test_read_format_rar.c
+    test_read_format_rar_encryption_data.c
+    test_read_format_rar_encryption_header.c
+    test_read_format_rar_encryption_partially.c
     test_read_format_raw.c
     test_read_format_tar.c
+    test_read_format_tar_concatenated.c
     test_read_format_tar_empty_filename.c
+    test_read_format_tar_empty_pax.c
     test_read_format_tar_filename.c
     test_read_format_tbz.c
     test_read_format_tgz.c
@@ -135,22 +145,30 @@ IF(ENABLE_TEST)
     test_read_format_txz.c
     test_read_format_tz.c
     test_read_format_ustar_filename.c
+    test_read_format_warc.c
     test_read_format_xar.c
     test_read_format_zip.c
     test_read_format_zip_comment_stored.c
+    test_read_format_zip_encryption_data.c
+    test_read_format_zip_encryption_header.c
+    test_read_format_zip_encryption_partially.c
     test_read_format_zip_filename.c
     test_read_format_zip_mac_metadata.c
+    test_read_format_zip_nofiletype.c
+    test_read_format_zip_padded.c
     test_read_format_zip_sfx.c
+    test_read_format_zip_zip64.c
     test_read_large.c
     test_read_pax_truncated.c
     test_read_position.c
+    test_read_set_format.c
     test_read_truncated.c
     test_read_truncated_filter.c
     test_sparse_basic.c
     test_tar_filenames.c
     test_tar_large.c
-    test_ustar_filenames.c
     test_ustar_filename_encoding.c
+    test_ustar_filenames.c
     test_write_disk.c
     test_write_disk_appledouble.c
     test_write_disk_failures.c
@@ -198,19 +216,28 @@ IF(ENABLE_TEST)
     test_write_format_mtree_no_separator.c
     test_write_format_mtree_quoted_filename.c
     test_write_format_pax.c
+    test_write_format_raw.c
+    test_write_format_raw_b64.c
     test_write_format_shar_empty.c
     test_write_format_tar.c
     test_write_format_tar_empty.c
     test_write_format_tar_sparse.c
     test_write_format_tar_ustar.c
     test_write_format_tar_v7tar.c
+    test_write_format_warc.c
+    test_write_format_warc_empty.c
     test_write_format_xar.c
     test_write_format_xar_empty.c
     test_write_format_zip.c
+    test_write_format_zip_compression_store.c
     test_write_format_zip_empty.c
-    test_write_format_zip_no_compression.c
-    test_write_zip_set_compression_store.c
+    test_write_format_zip_empty_zip64.c
+    test_write_format_zip_file.c
+    test_write_format_zip_file_zip64.c
+    test_write_format_zip_large.c
+    test_write_format_zip_zip64.c
     test_write_open_memory.c
+    test_write_read_format_zip.c
     test_zip_filename_encoding.c
   )
 
@@ -243,7 +270,7 @@ IF(ENABLE_TEST)
 
   INCLUDE(${CMAKE_CURRENT_BINARY_DIR}/list.h)
   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/test_utils)
+  INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/test_utils)
 
   # Experimental new test handling
   ADD_CUSTOM_TARGET(run_libarchive_test

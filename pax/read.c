@@ -179,6 +179,10 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 		archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
 	bsdpax_set_options(bsdpax->options, archive_read_set_options, a);
+	if (bsdpax->option_ignore_zeros)
+		if (archive_read_set_options(a,
+		    "read_concatenated_archives") != ARCHIVE_OK)
+			lafe_errc(1, 0, "%s", archive_error_string(a));
 	if (archive_read_open_filename(a, bsdpax->filename,
 					bsdpax->bytes_per_block))
 		lafe_errc(1, 0, "Error opening archive: %s",

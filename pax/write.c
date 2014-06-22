@@ -522,6 +522,7 @@ append_archive_filename(struct bsdpax *bsdpax, struct archive *a,
 	ina = archive_read_new();
 	archive_read_support_format_all(ina);
 	archive_read_support_filter_all(ina);
+	archive_read_set_options(ina, "mtree:checkfs");
 	if (archive_read_open_filename(ina, filename,
 					bsdpax->bytes_per_block)) {
 		lafe_warnc(0, "%s", archive_error_string(ina));

@@ -178,21 +178,8 @@ main(int argc, char **argv)
 	}
 #endif
 
-
-	/* Need lafe_progname before calling lafe_warnc. */
-	if (*argv == NULL)
-		lafe_progname = "bsdtar";
-	else {
-#if defined(_WIN32) && !defined(__CYGWIN__)
-		lafe_progname = strrchr(*argv, '\\');
-		if (strrchr(*argv, '/') > lafe_progname)
-#endif
-		lafe_progname = strrchr(*argv, '/');
-		if (lafe_progname != NULL)
-			lafe_progname++;
-		else
-			lafe_progname = *argv;
-	}
+	/* Set lafe_progname before calling lafe_warnc. */
+	lafe_setprogname(*argv, "bsdtar");
 
 #if HAVE_SETLOCALE
 	if (setlocale(LC_ALL, "") == NULL)
@@ -351,6 +338,9 @@ main(int argc, char **argv)
 		case OPTION_HFS_COMPRESSION: /* Mac OS X v10.6 or later */
 			bsdtar->extract_flags |=
 			    ARCHIVE_EXTRACT_HFS_COMPRESSION_FORCED;
+			break;
+		case OPTION_IGNORE_ZEROS:
+			bsdtar->option_ignore_zeros = 1;
 			break;
 		case 'I': /* GNU tar */
 			/*
@@ -570,7 +560,7 @@ main(int argc, char **argv)
 			bsdtar->extract_flags |= ARCHIVE_EXTRACT_SPARSE;
 			break;
 		case 's': /* NetBSD pax-as-tar */
-#if HAVE_REGEX_H
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 			add_substitution(bsdtar, bsdtar->argument);
 #else
 			lafe_warnc(0,
@@ -806,7 +796,7 @@ main(int argc, char **argv)
 	}
 
 	archive_match_free(bsdtar->matching);
-#if HAVE_REGEX_H
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 	cleanup_substitution(bsdtar);
 #endif
 	cset_free(bsdtar->cset);
@@ -844,7 +834,7 @@ usage(void)
 {
 	const char	*p;
 
-	p = lafe_progname;
+	p = lafe_getprogname();
 
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  List:    %s -tf <archive-filename>\n", p);
@@ -859,7 +849,7 @@ version(void)
 {
 	printf("bsdtar %s - %s\n",
 	    BSDTAR_VERSION_STRING,
-	    archive_version_string());
+	    archive_version_details());
 	exit(0);
 }
 
@@ -904,7 +894,7 @@ long_help(void)
 	const char	*prog;
 	const char	*p;
 
-	prog = lafe_progname;
+	prog = lafe_getprogname();
 
 	fflush(stderr);
 

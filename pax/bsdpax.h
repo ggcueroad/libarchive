@@ -73,6 +73,7 @@ struct bsdpax {
 	char		  option_keep_newer_ctime_files_br;/* -D option */
 	char		  option_keep_newer_mtime_files_ar;/* -Z option */
 	char		  option_keep_newer_ctime_files_ar;/* -Y option */
+	char		  option_ignore_zeros; /* --ignore-zeros */
 	char		  option_interactive; /* -i */
 	char		  option_link; /* -l */
 	char		  option_no_owner; /* -o */
@@ -133,6 +134,7 @@ enum {
 	OPTION_DISABLE_COPYFILE,
 	OPTION_GRZIP,
 	OPTION_HELP,
+	OPTION_IGNORE_ZEROS,
 	OPTION_INSECURE,
 	OPTION_LRZIP,
 	OPTION_LZIP,
@@ -166,7 +168,7 @@ int	disk_new_enough(struct bsdpax *bsdpax, const char *path,
 	    struct archive_entry *entry, int);
 
 
-#if HAVE_REGEX_H
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 void	add_substitution(struct bsdpax *, const char *);
 int	apply_substitution(struct bsdpax *, const char *, char **, int, int);
 void	cleanup_substitution(struct bsdpax *);

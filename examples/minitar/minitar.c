@@ -249,7 +249,7 @@ create(const char *filename, int compress, const char **argv)
 		break;
 	}
 	archive_write_set_format_ustar(a);
-	if (strcmp(filename, "-") == 0)
+	if (filename != NULL && strcmp(filename, "-") == 0)
 		filename = NULL;
 	archive_write_open_filename(a, filename);
 
@@ -400,7 +400,7 @@ copy_data(struct archive *ar, struct archive *aw)
 	int r;
 	const void *buff;
 	size_t size;
-	off_t offset;
+	int64_t offset;
 
 	for (;;) {
 		r = archive_read_data_block(ar, &buff, &size, &offset);
@@ -427,6 +427,9 @@ msg(const char *m)
 static void
 errmsg(const char *m)
 {
+	if (m == NULL) {
+		m = "Error: No error description provided.\n";
+	}
 	write(2, m, strlen(m));
 }
 

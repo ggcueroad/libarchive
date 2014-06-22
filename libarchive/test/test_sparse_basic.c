@@ -40,6 +40,9 @@ __FBSDID("$FreeBSD$");
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#ifdef HAVE_LINUX_TYPES_H
+#include <linux/types.h>
+#endif
 #ifdef HAVE_LINUX_FIEMAP_H
 #include <linux/fiemap.h>
 #endif
@@ -173,6 +176,7 @@ is_sparse_supported(const char *path)
 	const char *testfile = "can_sparse";
 
 	(void)path; /* UNUSED */
+	memset(buff, 0, sizeof(buff));
 	create_sparse_file(testfile, sparse_file);
 	fd = open(testfile,  O_RDWR);
 	if (fd < 0)

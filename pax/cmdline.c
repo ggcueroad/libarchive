@@ -81,6 +81,7 @@ static const struct bsdpax_option {
 	{ "gunzip",			0, 'z' },
 	{ "gzip",			0, 'z' },
 	{ "help",			0, OPTION_HELP },
+	{ "ignore-zeros",		0, OPTION_IGNORE_ZEROS },
 	{ "inverse",			0, 'c' },
 	{ "insecure",			0, OPTION_INSECURE },
 	{ "interactive",		0, 'i' },

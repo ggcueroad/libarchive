@@ -35,6 +35,8 @@ SET(libarchive_SOURCES
   archive_match.c
   archive_options.c
   archive_options_private.h
+  archive_pack_dev.h
+  archive_pack_dev.c
   archive_pathmatch.c
   archive_pathmatch.h
   archive_platform.h
@@ -45,17 +47,20 @@ SET(libarchive_SOURCES
   archive_rb.c
   archive_rb.h
   archive_read.c
+  archive_read_append_filter.c
   archive_read_data_into_fd.c
   archive_read_disk_entry_from_file.c
   archive_read_disk_posix.c
   archive_read_disk_private.h
   archive_read_disk_set_standard_lookup.c
   archive_read_extract.c
+  archive_read_extract2.c
   archive_read_open_fd.c
   archive_read_open_file.c
   archive_read_open_filename.c
   archive_read_open_memory.c
   archive_read_private.h
+  archive_read_set_format.c
   archive_read_set_options.c
   archive_read_support_filter_all.c
   archive_read_support_filter_bzip2.c
@@ -82,6 +87,7 @@ SET(libarchive_SOURCES
   archive_read_support_format_rar.c
   archive_read_support_format_raw.c
   archive_read_support_format_tar.c
+  archive_read_support_format_warc.c
   archive_read_support_format_xar.c
   archive_read_support_format_zip.c
   archive_string.c
@@ -123,9 +129,11 @@ SET(libarchive_SOURCES
   archive_write_set_format_iso9660.c
   archive_write_set_format_mtree.c
   archive_write_set_format_pax.c
+  archive_write_set_format_raw.c
   archive_write_set_format_shar.c
   archive_write_set_format_ustar.c
   archive_write_set_format_v7tar.c
+  archive_write_set_format_warc.c
   archive_write_set_format_xar.c
   archive_write_set_format_zip.c
   archive_write_set_options.c
@@ -173,6 +181,7 @@ SET_TARGET_PROPERTIES(archive PROPERTIES SOVERSION ${SOVERSION})
 
 # archive_static is a static library
 ADD_LIBRARY(archive_static STATIC ${libarchive_SOURCES} ${include_HEADERS})
+TARGET_LINK_LIBRARIES(archive_static ${ADDITIONAL_LIBS})
 SET_TARGET_PROPERTIES(archive_static PROPERTIES COMPILE_DEFINITIONS
   LIBARCHIVE_STATIC)
 # On Posix systems, libarchive.so and libarchive.a can co-exist.

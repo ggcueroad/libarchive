@@ -154,21 +154,8 @@ main(int argc, char **argv)
 	}
 #endif
 
-
-	/* Need lafe_progname before calling lafe_warnc. */
-	if (*argv == NULL)
-		lafe_progname = "bsdpax";
-	else {
-#if defined(_WIN32) && !defined(__CYGWIN__)
-		lafe_progname = strrchr(*argv, '\\');
-#else
-		lafe_progname = strrchr(*argv, '/');
-#endif
-		if (lafe_progname != NULL)
-			lafe_progname++;
-		else
-			lafe_progname = *argv;
-	}
+	/* Set lafe_progname before calling lafe_warnc. */
+	lafe_setprogname(*argv, "bsdpax");
 
 #if HAVE_SETLOCALE
 	if (setlocale(LC_ALL, "") == NULL)
@@ -288,6 +275,9 @@ main(int argc, char **argv)
 		case 'H':
 			bsdpax->symlink_mode = opt;
 			break;
+		case OPTION_IGNORE_ZEROS:
+			bsdpax->option_ignore_zeros = 1;
+			break;
 		case OPTION_HELP:
 			long_help();
 			exit(0);
@@ -386,7 +376,7 @@ main(int argc, char **argv)
 				bsdpax->mode = PAXMODE_READ;
 			break;
 		case 's':
-#if HAVE_REGEX_H
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 			add_substitution(bsdpax, bsdpax->argument);
 #else
 			lafe_warnc(0,
@@ -547,7 +537,7 @@ main(int argc, char **argv)
 	}
 
 	archive_match_free(bsdpax->matching);
-#if HAVE_REGEX_H
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 	cleanup_substitution(bsdpax);
 #endif
 	bsdpax_free_options(bsdpax->options);
@@ -633,7 +623,7 @@ usage(void)
 {
 	const char	*p;
 
-	p = lafe_progname;
+	p = lafe_getprogname();
 
 	fprintf(stderr, "Usage:\n");
 	fprintf(stderr, "  List:    %s -f <archive-filename>\n", p);
@@ -649,7 +639,7 @@ version(void)
 {
 	printf("bsdpax %s - %s\n",
 	    BSDPAX_VERSION_STRING,
-	    archive_version_string());
+	    archive_version_details());
 	exit(0);
 }
 
@@ -687,7 +677,7 @@ long_help(void)
 	const char	*prog;
 	const char	*p;
 
-	prog = lafe_progname;
+	prog = lafe_getprogname();
 
 	fflush(stderr);
 

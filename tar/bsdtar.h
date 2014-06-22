@@ -63,6 +63,7 @@ struct bsdtar {
 	char		  option_chroot; /* --chroot */
 	char		  option_fast_read; /* --fast-read */
 	const char	 *option_options; /* --options */
+	char		  option_ignore_zeros; /* --ignore-zeros */
 	char		  option_interactive; /* -w */
 	char		  option_no_owner; /* -o */
 	char		  option_no_subdirs; /* -n */
@@ -124,6 +125,7 @@ enum {
 	OPTION_GRZIP,
 	OPTION_HELP,
 	OPTION_HFS_COMPRESSION,
+	OPTION_IGNORE_ZEROS,
 	OPTION_INCLUDE,
 	OPTION_KEEP_NEWER_FILES,
 	OPTION_LRZIP,
@@ -173,7 +175,7 @@ void	tar_mode_x(struct bsdtar *bsdtar);
 void	usage(void);
 int	yes(const char *fmt, ...);
 
-#if HAVE_REGEX_H
+#if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 void	add_substitution(struct bsdtar *, const char *);
 int	apply_substitution(struct bsdtar *, const char *, char **, int, int);
 void	cleanup_substitution(struct bsdtar *);

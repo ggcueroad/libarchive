@@ -43,6 +43,10 @@
 #include "config.h"
 #endif
 
+#if defined(_WIN32) && !defined(__CYGWIN__)
+#include "bsdpax_windows.h"
+#endif
+
 /* Get a real definition for __FBSDID if we can */
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
@@ -91,10 +95,6 @@
 #endif
 #if !HAVE_DECL_INT64_MAX
 #define	INT64_MAX ((int64_t)(UINT64_MAX >> 1))
-#endif
-
-#if defined(_WIN32) && !defined(__CYGWIN__)
-#include "bsdpax_windows.h"
 #endif
 
 #endif /* !BSDPAX_PLATFORM_H_INCLUDED */

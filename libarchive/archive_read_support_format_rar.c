@@ -201,6 +201,7 @@ struct lzss
 
 struct data_block_offsets
 {
+  int64_t header_size;
   int64_t start_offset;
   int64_t end_offset;
 };
@@ -224,6 +225,7 @@ struct rar
   mode_t mode;
   char *filename;
   char *filename_save;
+  size_t filename_save_size;
   size_t filename_allocated;
 
   /* File header optional entries */
@@ -241,6 +243,7 @@ struct rar
   int64_t bytes_uncopied;
   int64_t offset;
   int64_t offset_outgoing;
+  int64_t offset_seek;
   char valid;
   unsigned int unp_offset;
   unsigned int unp_buffer_size;
@@ -302,8 +305,15 @@ struct rar
     ssize_t		 avail_in;
     const unsigned char *next_in;
   } br;
+
+  /*
+   * Custom field to denote that this archive contains encrypted entries
+   */
+  int has_encrypted_entries;
 };
 
+static int archive_read_support_format_rar_capabilities(struct archive_read *);
+static int archive_read_format_rar_has_encrypted_entries(struct archive_read *);
 static int archive_read_format_rar_bid(struct archive_read *, int);
 static int archive_read_format_rar_options(struct archive_read *,
     const char *, const char *);
@@ -644,6 +654,12 @@ archive_read_support_format_rar(struct archive *_a)
   }
   memset(rar, 0, sizeof(*rar));
 
+	/*
+	 * Until enough data has been read, we cannot tell about
+	 * any encrypted entries yet.
+	 */
+	rar->has_encrypted_entries = ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW;
+
   r = __archive_read_register_format(a,
                                      rar,
                                      "rar",
@@ -653,12 +669,35 @@ archive_read_support_format_rar(struct archive *_a)
                                      archive_read_format_rar_read_data,
                                      archive_read_format_rar_read_data_skip,
                                      archive_read_format_rar_seek_data,
-                                     archive_read_format_rar_cleanup);
+                                     archive_read_format_rar_cleanup,
+                                     archive_read_support_format_rar_capabilities,
+                                     archive_read_format_rar_has_encrypted_entries);
 
   if (r != ARCHIVE_OK)
     free(rar);
   return (r);
 }
+
+static int
+archive_read_support_format_rar_capabilities(struct archive_read * a)
+{
+	(void)a; /* UNUSED */
+	return (ARCHIVE_READ_FORMAT_CAPS_ENCRYPT_DATA
+			| ARCHIVE_READ_FORMAT_CAPS_ENCRYPT_METADATA);
+}
+
+static int
+archive_read_format_rar_has_encrypted_entries(struct archive_read *_a)
+{
+	if (_a && _a->format) {
+		struct rar * rar = (struct rar *)_a->format->data;
+		if (rar) {
+			return rar->has_encrypted_entries;
+		}
+	}
+	return ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW;
+}
+
 
 static int
 archive_read_format_rar_bid(struct archive_read *a, int best_bid)
@@ -753,7 +792,7 @@ archive_read_format_rar_options(struct archive_read *a,
 {
   struct rar *rar;
   int ret = ARCHIVE_FAILED;
-        
+
   rar = (struct rar *)(a->format->data);
   if (strcmp(key, "hdrcharset")  == 0) {
     if (val == NULL || val[0] == 0)
@@ -794,6 +833,17 @@ archive_read_format_rar_read_header(struct archive_read *a,
     a->archive.archive_format_name = "RAR";
 
   rar = (struct rar *)(a->format->data);
+
+  /*
+   * It should be sufficient to call archive_read_next_header() for
+   * a reader to determine if an entry is encrypted or not. If the
+   * encryption of an entry is only detectable when calling
+   * archive_read_data(), so be it. We'll do the same check there
+   * as well.
+   */
+  if (rar->has_encrypted_entries == ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW) {
+	  rar->has_encrypted_entries = 0;
+  }
 
   /* RAR files can be generated without EOF headers, so return ARCHIVE_EOF if
   * this fails.
@@ -855,9 +905,14 @@ archive_read_format_rar_read_header(struct archive_read *a,
                             sizeof(rar->reserved2));
       }
 
+      /* Main header is password encrytped, so we cannot read any
+         file names or any other info about files from the header. */
       if (rar->main_flags & MHD_PASSWORD)
       {
-        archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
+        archive_entry_set_is_metadata_encrypted(entry, 1);
+        archive_entry_set_is_data_encrypted(entry, 1);
+        rar->has_encrypted_entries = 1;
+         archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                           "RAR encryption support unavailable.");
         return (ARCHIVE_FATAL);
       }
@@ -936,16 +991,22 @@ archive_read_format_rar_read_data(struct archive_read *a, const void **buff,
   struct rar *rar = (struct rar *)(a->format->data);
   int ret;
 
+  if (rar->has_encrypted_entries == ARCHIVE_READ_FORMAT_ENCRYPTION_DONT_KNOW) {
+	  rar->has_encrypted_entries = 0;
+  }
+
   if (rar->bytes_unconsumed > 0) {
       /* Consume as much as the decompressor actually used. */
       __archive_read_consume(a, rar->bytes_unconsumed);
       rar->bytes_unconsumed = 0;
   }
 
-  if (rar->entry_eof) {
+  if (rar->entry_eof || rar->offset_seek >= rar->unp_size) {
     *buff = NULL;
     *size = 0;
     *offset = rar->offset;
+    if (*offset < rar->unp_size)
+      *offset = rar->unp_size;
     return (ARCHIVE_EOF);
   }
 
@@ -953,7 +1014,7 @@ archive_read_format_rar_read_data(struct archive_read *a, const void **buff,
   {
   case COMPRESS_METHOD_STORE:
     ret = read_data_stored(a, buff, size, offset);
-    break; 
+    break;
 
   case COMPRESS_METHOD_FASTEST:
   case COMPRESS_METHOD_FAST:
@@ -963,13 +1024,13 @@ archive_read_format_rar_read_data(struct archive_read *a, const void **buff,
     ret = read_data_compressed(a, buff, size, offset);
     if (ret != ARCHIVE_OK && ret != ARCHIVE_WARN)
       __archive_ppmd7_functions.Ppmd7_Free(&rar->ppmd7_context, &g_szalloc);
-    break; 
+    break;
 
   default:
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                       "Unsupported compression method for RAR file.");
     ret = ARCHIVE_FATAL;
-    break; 
+    break;
   }
   return (ret);
 }
@@ -1019,66 +1080,126 @@ archive_read_format_rar_seek_data(struct archive_read *a, int64_t offset,
   unsigned int i;
   struct rar *rar = (struct rar *)(a->format->data);
 
-  if (rar->compression_method & COMPRESS_METHOD_STORE)
+  if (rar->compression_method == COMPRESS_METHOD_STORE)
   {
     /* Modify the offset for use with SEEK_SET */
     switch (whence)
     {
-      case SEEK_SET:
-        break;
-
       case SEEK_CUR:
-        offset += rar->offset;
+        client_offset = rar->offset_seek;
         break;
-
       case SEEK_END:
-        offset += rar->unp_size - 1;
+        client_offset = rar->unp_size;
         break;
+      case SEEK_SET:
+      default:
+        client_offset = 0;
     }
-    if (offset < 0)
-      offset = 0;
-    else if (offset > rar->unp_size - 1)
-      offset = rar->unp_size - 1;
+    client_offset += offset;
+    if (client_offset < 0)
+    {
+      /* Can't seek past beginning of data block */
+      return -1;
+    }
+    else if (client_offset > rar->unp_size)
+    {
+      /*
+       * Set the returned offset but only seek to the end of
+       * the data block.
+       */
+      rar->offset_seek = client_offset;
+      client_offset = rar->unp_size;
+    }
 
-    /* Find the appropriate offset in the client */
+    client_offset += rar->dbo[0].start_offset;
     i = 0;
-    client_offset = offset;
-    client_offset += rar->dbo[i].start_offset;
-    while (rar->main_flags & MHD_VOLUME &&
-      client_offset > rar->dbo[i].end_offset)
+    while (i < rar->cursor)
     {
       i++;
-      if (i >= rar->nodes || client_offset <= rar->dbo[i].end_offset)
+      client_offset += rar->dbo[i].start_offset - rar->dbo[i-1].end_offset;
+    }
+    if (rar->main_flags & MHD_VOLUME)
+    {
+      /* Find the appropriate offset among the multivolume archive */
+      while (1)
       {
-        ret = __archive_read_seek(a, rar->dbo[i-1].end_offset + 1, SEEK_SET);
-        if (ret < (ARCHIVE_OK))
-          return ret;
-        ret = archive_read_format_rar_read_header(a, a->entry);
-        if (ret == (ARCHIVE_EOF))
+        if (client_offset < rar->dbo[rar->cursor].start_offset &&
+          rar->file_flags & FHD_SPLIT_BEFORE)
         {
-          rar->has_endarc_header = 1;
+          /* Search backwards for the correct data block */
+          if (rar->cursor == 0)
+          {
+            archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+              "Attempt to seek past beginning of RAR data block");
+            return (ARCHIVE_FAILED);
+          }
+          rar->cursor--;
+          client_offset -= rar->dbo[rar->cursor+1].start_offset -
+            rar->dbo[rar->cursor].end_offset;
+          if (client_offset < rar->dbo[rar->cursor].start_offset)
+            continue;
+          ret = __archive_read_seek(a, rar->dbo[rar->cursor].start_offset -
+            rar->dbo[rar->cursor].header_size, SEEK_SET);
+          if (ret < (ARCHIVE_OK))
+            return ret;
           ret = archive_read_format_rar_read_header(a, a->entry);
+          if (ret != (ARCHIVE_OK))
+          {
+            archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+              "Error during seek of RAR file");
+            return (ARCHIVE_FAILED);
+          }
+          rar->cursor--;
+          break;
         }
-        if (ret != (ARCHIVE_OK))
+        else if (client_offset > rar->dbo[rar->cursor].end_offset &&
+          rar->file_flags & FHD_SPLIT_AFTER)
         {
-          archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
-            "Error during seek of RAR file");
-          return (ARCHIVE_FAILED);
+          /* Search forward for the correct data block */
+          rar->cursor++;
+          if (rar->cursor < rar->nodes &&
+            client_offset > rar->dbo[rar->cursor].end_offset)
+          {
+            client_offset += rar->dbo[rar->cursor].start_offset -
+              rar->dbo[rar->cursor-1].end_offset;
+            continue;
+          }
+          rar->cursor--;
+          ret = __archive_read_seek(a, rar->dbo[rar->cursor].end_offset,
+                                    SEEK_SET);
+          if (ret < (ARCHIVE_OK))
+            return ret;
+          ret = archive_read_format_rar_read_header(a, a->entry);
+          if (ret == (ARCHIVE_EOF))
+          {
+            rar->has_endarc_header = 1;
+            ret = archive_read_format_rar_read_header(a, a->entry);
+          }
+          if (ret != (ARCHIVE_OK))
+          {
+            archive_set_error(&a->archive, ARCHIVE_ERRNO_MISC,
+              "Error during seek of RAR file");
+            return (ARCHIVE_FAILED);
+          }
+          client_offset += rar->dbo[rar->cursor].start_offset -
+            rar->dbo[rar->cursor-1].end_offset;
+          continue;
         }
+        break;
       }
-      client_offset += rar->dbo[i].start_offset - rar->dbo[i-1].end_offset - 1;
     }
 
     ret = __archive_read_seek(a, client_offset, SEEK_SET);
     if (ret < (ARCHIVE_OK))
       return ret;
-    rar->bytes_remaining = rar->dbo[i].end_offset - ret + 1;
+    rar->bytes_remaining = rar->dbo[rar->cursor].end_offset - ret;
+    i = rar->cursor;
     while (i > 0)
     {
-      ret -= rar->dbo[i].start_offset - rar->dbo[i-1].end_offset - 1;
       i--;
+      ret -= rar->dbo[i+1].start_offset - rar->dbo[i].end_offset;
     }
-    ret -= rar->dbo[i].start_offset;
+    ret -= rar->dbo[0].start_offset;
 
     /* Always restart reading the file after a seek */
     a->read_data_block = NULL;
@@ -1088,7 +1209,16 @@ archive_read_format_rar_seek_data(struct archive_read *a, int64_t offset,
     rar->bytes_unconsumed = 0;
     rar->offset = 0;
 
-    return ret;
+    /*
+     * If a seek past the end of file was requested, return the requested
+     * offset.
+     */
+    if (ret == rar->unp_size && rar->offset_seek > rar->unp_size)
+      return rar->offset_seek;
+
+    /* Return the new offset */
+    rar->offset_seek = ret;
+    return rar->offset_seek;
   }
   else
   {
@@ -1217,9 +1347,14 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 
   if (rar->file_flags & FHD_PASSWORD)
   {
+	archive_entry_set_is_data_encrypted(entry, 1);
+	rar->has_encrypted_entries = 1;
     archive_set_error(&a->archive, ARCHIVE_ERRNO_FILE_FORMAT,
                       "RAR encryption support unavailable.");
-    return (ARCHIVE_FATAL);
+    /* Since it is only the data part itself that is encrypted we can at least
+       extract information about the currently processed entry and don't need
+       to return ARCHIVE_FATAL here. */
+    /*return (ARCHIVE_FATAL);*/
   }
 
   if (rar->file_flags & FHD_LARGE)
@@ -1304,7 +1439,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
           flagbyte = *(p + offset++);
           flagbits = 8;
         }
-	
+
         flagbits -= 2;
         switch((flagbyte >> flagbits) & 3)
         {
@@ -1396,6 +1531,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 
   /* Split file in multivolume RAR. No more need to process header. */
   if (rar->filename_save &&
+    filename_size == rar->filename_save_size &&
     !memcmp(rar->filename, rar->filename_save, filename_size + 1))
   {
     __archive_read_consume(a, header_size - 7);
@@ -1409,6 +1545,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
         archive_set_error(&a->archive, ENOMEM, "Couldn't allocate memory.");
         return (ARCHIVE_FATAL);
       }
+      rar->dbo[rar->cursor].header_size = header_size;
       rar->dbo[rar->cursor].start_offset = -1;
       rar->dbo[rar->cursor].end_offset = -1;
     }
@@ -1416,7 +1553,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     {
       rar->dbo[rar->cursor].start_offset = a->filter->position;
       rar->dbo[rar->cursor].end_offset = rar->dbo[rar->cursor].start_offset +
-        rar->packed_size - 1;
+        rar->packed_size;
     }
     return ret;
   }
@@ -1424,6 +1561,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
   rar->filename_save = (char*)realloc(rar->filename_save,
                                       filename_size + 1);
   memcpy(rar->filename_save, rar->filename, filename_size + 1);
+  rar->filename_save_size = filename_size;
 
   /* Set info for seeking */
   free(rar->dbo);
@@ -1432,6 +1570,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
     archive_set_error(&a->archive, ENOMEM, "Couldn't allocate memory.");
     return (ARCHIVE_FATAL);
   }
+  rar->dbo[0].header_size = header_size;
   rar->dbo[0].start_offset = -1;
   rar->dbo[0].end_offset = -1;
   rar->cursor = 0;
@@ -1458,7 +1597,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 
   __archive_read_consume(a, header_size - 7);
   rar->dbo[0].start_offset = a->filter->position;
-  rar->dbo[0].end_offset = rar->dbo[0].start_offset + rar->packed_size - 1;
+  rar->dbo[0].end_offset = rar->dbo[0].start_offset + rar->packed_size;
 
   switch(file_header.host_os)
   {
@@ -1487,6 +1626,7 @@ read_header(struct archive_read *a, struct archive_entry *entry,
 
   rar->bytes_uncopied = rar->bytes_unconsumed = 0;
   rar->lzss.position = rar->offset = 0;
+  rar->offset_seek = 0;
   rar->dictionary_size = 0;
   rar->offset_outgoing = 0;
   rar->br.cache_avail = 0;
@@ -1698,6 +1838,7 @@ read_data_stored(struct archive_read *a, const void **buff, size_t *size,
   *size = bytes_avail;
   *offset = rar->offset;
   rar->offset += bytes_avail;
+  rar->offset_seek += bytes_avail;
   rar->bytes_remaining -= bytes_avail;
   rar->bytes_unconsumed = bytes_avail;
   /* Calculate File CRC. */
@@ -2534,7 +2675,7 @@ expand(struct archive_read *a, int64_t end)
     if ((symbol = read_next_symbol(a, &rar->maincode)) < 0)
       return (ARCHIVE_FATAL);
     rar->output_last_match = 0;
-    
+
     if (symbol < 256)
     {
       lzss_emit_literal(rar, symbol);
@@ -2757,6 +2898,8 @@ rar_read_ahead(struct archive_read *a, size_t min, ssize_t *avail)
   int ret;
   if (avail)
   {
+    if (a->read_data_is_posix_read && *avail > (ssize_t)a->read_data_requested)
+      *avail = a->read_data_requested;
     if (*avail > rar->bytes_remaining)
       *avail = (ssize_t)rar->bytes_remaining;
     if (*avail < 0)
