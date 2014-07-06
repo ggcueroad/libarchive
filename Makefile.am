@@ -151,6 +151,7 @@ libarchive_la_SOURCES= \
 	libarchive/archive_read_support_filter_grzip.c \
 	libarchive/archive_read_support_filter_gzip.c \
 	libarchive/archive_read_support_filter_lrzip.c \
+	libarchive/archive_read_support_filter_lz4.c \
 	libarchive/archive_read_support_filter_lzop.c \
 	libarchive/archive_read_support_filter_none.c \
 	libarchive/archive_read_support_filter_program.c \
@@ -220,9 +221,12 @@ libarchive_la_SOURCES= \
 	libarchive/archive_write_set_format_xar.c \
 	libarchive/archive_write_set_format_zip.c \
 	libarchive/archive_write_set_options.c \
+	libarchive/archive_xxhash.h \
 	libarchive/config_freebsd.h \
 	libarchive/filter_fork_posix.c \
-	libarchive/filter_fork.h
+	libarchive/filter_fork.h \
+	libarchive/xxhash.c \
+	libarchive/xxhash.h
 
 if INC_WINDOWS_FILES
 libarchive_la_SOURCES+= \
@@ -348,6 +352,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_compat_cpio.c \
 	libarchive/test/test_compat_gtar.c \
 	libarchive/test/test_compat_gzip.c \
+	libarchive/test/test_compat_lz4.c \
 	libarchive/test/test_compat_lzip.c \
 	libarchive/test/test_compat_lzma.c \
 	libarchive/test/test_compat_lzop.c \
@@ -357,6 +362,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_compat_solaris_pax_sparse.c \
 	libarchive/test/test_compat_tar_hardlink.c \
 	libarchive/test/test_compat_uudecode.c \
+	libarchive/test/test_compat_uudecode_large.c \
 	libarchive/test/test_compat_xz.c \
 	libarchive/test/test_compat_zip.c \
 	libarchive/test/test_empty_write.c \
@@ -425,6 +431,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_isorr_rr_moved.c \
 	libarchive/test/test_read_format_isozisofs_bz2.c \
 	libarchive/test/test_read_format_lha.c \
+	libarchive/test/test_read_format_lha_bugfix_0.c \
 	libarchive/test/test_read_format_lha_filename.c \
 	libarchive/test/test_read_format_mtree.c \
 	libarchive/test/test_read_format_pax_bz2.c \
@@ -560,6 +567,18 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_compat_gtar_1.tar.uu \
 	libarchive/test/test_compat_gzip_1.tgz.uu \
 	libarchive/test/test_compat_gzip_2.tgz.uu \
+	libarchive/test/test_compat_lz4_1.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_2.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_3.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B4.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B4BD.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B4BDBX.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B5.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B5BD.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B6.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B6BD.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B7.tar.lz4.uu \
+	libarchive/test/test_compat_lz4_B7BD.tar.lz4.uu \
 	libarchive/test/test_compat_lzip_1.tlz.uu \
 	libarchive/test/test_compat_lzip_2.tlz.uu \
 	libarchive/test/test_compat_lzma_1.tlz.uu \
@@ -575,6 +594,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_compat_solaris_pax_sparse_2.pax.Z.uu \
 	libarchive/test/test_compat_solaris_tar_acl.tar.uu \
 	libarchive/test/test_compat_tar_hardlink_1.tar.uu \
+	libarchive/test/test_compat_uudecode_large.tar.Z.uu \
 	libarchive/test/test_compat_xz_1.txz.uu \
 	libarchive/test/test_compat_zip_1.zip.uu \
 	libarchive/test/test_compat_zip_2.zip.uu \
@@ -676,6 +696,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_iso_rockridge_rr_moved.iso.Z.uu \
 	libarchive/test/test_read_format_iso_xorriso.iso.Z.uu \
 	libarchive/test/test_read_format_iso_zisofs.iso.Z.uu \
+	libarchive/test/test_read_format_lha_bugfix_0.lzh.uu \
 	libarchive/test/test_read_format_lha_filename_cp932.lzh.uu \
 	libarchive/test/test_read_format_lha_header0.lzh.uu \
 	libarchive/test/test_read_format_lha_header1.lzh.uu \

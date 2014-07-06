@@ -130,11 +130,16 @@ __LA_DECL int		archive_version_number(void);
 /*
  * Textual name/version of the library, useful for version displays.
  */
-#define	ARCHIVE_VERSION_STRING "libarchive 3.1.2"
+#define	ARCHIVE_VERSION_ONLY_STRING "3.1.2"
+#define	ARCHIVE_VERSION_STRING "libarchive " ARCHIVE_VERSION_ONLY_STRING
 __LA_DECL const char *	archive_version_string(void);
 
 /*
  * Detailed textual name/version of the library and its dependencies.
+ * This has the form:
+ *    "libarchive x.y.z zlib/a.b.c liblzma/d.e.f ... etc ..."
+ * the list of libraries described here will vary depending on how
+ * libarchive was compiled.
  */
 __LA_DECL const char *	archive_version_details(void);
 
@@ -228,6 +233,7 @@ typedef int archive_switch_callback(struct archive *, void *_client_data1,
 #define	ARCHIVE_FILTER_LRZIP	10
 #define	ARCHIVE_FILTER_LZOP	11
 #define	ARCHIVE_FILTER_GRZIP	12
+#define	ARCHIVE_FILTER_LZ4	13
 
 #if ARCHIVE_VERSION_NUMBER < 4000000
 #define	ARCHIVE_COMPRESSION_NONE	ARCHIVE_FILTER_NONE
@@ -372,6 +378,7 @@ __LA_DECL int archive_read_support_filter_compress(struct archive *);
 __LA_DECL int archive_read_support_filter_gzip(struct archive *);
 __LA_DECL int archive_read_support_filter_grzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lrzip(struct archive *);
+__LA_DECL int archive_read_support_filter_lz4(struct archive *);
 __LA_DECL int archive_read_support_filter_lzip(struct archive *);
 __LA_DECL int archive_read_support_filter_lzma(struct archive *);
 __LA_DECL int archive_read_support_filter_lzop(struct archive *);
