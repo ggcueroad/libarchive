@@ -631,8 +631,8 @@ assertion_equal_string(const char *file, int line,
 	if (v1 == v2 || (v1 != NULL && v2 != NULL && strcmp(v1, v2) == 0))
 		return (1);
 	failure_start(file, line, "%s != %s", e1, e2);
-	l1 = strlen(e1);
-	l2 = strlen(e2);
+	l1 = (int)strlen(e1);
+	l2 = (int)strlen(e2);
 	if (l1 < l2)
 		l1 = l2;
 	strdump(e1, v1, l1, utf8);
@@ -850,9 +850,14 @@ assertion_equal_file(const char *filename, int line, const char *fn1, const char
 
 	f1 = fopen(fn1, "rb");
 	f2 = fopen(fn2, "rb");
+	if (f1 == NULL || f2 == NULL) {
+		if (f1) fclose(f1);
+		if (f2) fclose(f2);
+		return (0);
+	}
 	for (;;) {
-		n1 = fread(buff1, 1, sizeof(buff1), f1);
-		n2 = fread(buff2, 1, sizeof(buff2), f2);
+		n1 = (int)fread(buff1, 1, sizeof(buff1), f1);
+		n2 = (int)fread(buff2, 1, sizeof(buff2), f2);
 		if (n1 != n2)
 			break;
 		if (n1 == 0 && n2 == 0) {
@@ -926,7 +931,7 @@ assertion_file_contents(const char *filename, int line, const void *buff, int s,
 		return (0);
 	}
 	contents = malloc(s * 2);
-	n = fread(contents, 1, s * 2, f);
+	n = (int)fread(contents, 1, s * 2, f);
 	fclose(f);
 	if (n == s && memcmp(buff, contents, s) == 0) {
 		free(contents);
@@ -962,9 +967,9 @@ assertion_text_file_contents(const char *filename, int line, const char *buff, c
 		failure_finish(NULL);
 		return (0);
 	}
-	s = strlen(buff);
+	s = (int)strlen(buff);
 	contents = malloc(s * 2 + 128);
-	n = fread(contents, 1, s * 2 + 128 - 1, f);
+	n = (int)fread(contents, 1, s * 2 + 128 - 1, f);
 	if (n >= 0)
 		contents[n] = '\0';
 	fclose(f);
@@ -1039,6 +1044,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 		if (expected == NULL) {
 			failure_start(pathname, line, "Can't allocate memory");
 			failure_finish(NULL);
+			free(expected);
 			return (0);
 		}
 		for (i = 0; lines[i] != NULL; ++i) {
@@ -1063,8 +1069,7 @@ assertion_file_contains_lines_any_order(const char *file, int line,
 			free(expected);
 			return (0);
 		}
-		for (j = 0, p = buff; p < buff + buff_size;
-		    p += 1 + strlen(p)) {
+		for (j = 0, p = buff; p < buff + buff_size; p += 1 + strlen(p)) {
 			if (*p != '\0') {
 				actual[j] = p;
 				++j;
@@ -2199,6 +2204,29 @@ extract_reference_file(const char *name)
 	fclose(in);
 }
 
+void
+copy_reference_file(const char *name)
+{
+	char buff[1024];
+	FILE *in, *out;
+	size_t rbytes;
+
+	sprintf(buff, "%s/%s", refdir, name);
+	in = fopen(buff, "rb");
+	failure("Couldn't open reference file %s", buff);
+	assert(in != NULL);
+	if (in == NULL)
+		return;
+	/* Now, decode the rest and write it. */
+	/* Not a lot of error checking here; the input better be right. */
+	out = fopen(name, "wb");
+	while ((rbytes = fread(buff, 1, sizeof(buff), in)) > 0) {
+		fwrite(buff, 1, rbytes, out);
+	}
+	fclose(out);
+	fclose(in);
+}
+
 int
 is_LargeInode(const char *file)
 {
@@ -2249,7 +2277,7 @@ struct test_list_t tests[] = {
  * Summarize repeated failures in the just-completed test.
  */
 static void
-test_summarize(int failed)
+test_summarize(int failed, int skips_num)
 {
 	unsigned int i;
 
@@ -2259,7 +2287,7 @@ test_summarize(int failed)
 		fflush(stdout);
 		break;
 	case VERBOSITY_PASSFAIL:
-		printf(failed ? "FAIL\n" : "ok\n");
+		printf(failed ? "FAIL\n" : skips_num ? "ok (S)\n" : "ok\n");
 		break;
 	}
 
@@ -2284,6 +2312,7 @@ test_run(int i, const char *tmpdir)
 	char workdir[1024];
 	char logfilename[64];
 	int failures_before = failures;
+	int skips_before = skips;
 	int oldumask;
 
 	switch (verbosity) {
@@ -2340,7 +2369,7 @@ test_run(int i, const char *tmpdir)
 	}
 	/* Report per-test summaries. */
 	tests[i].failures = failures - failures_before;
-	test_summarize(tests[i].failures);
+	test_summarize(tests[i].failures, skips - skips_before);
 	/* Close the per-test log file. */
 	fclose(logfile);
 	logfile = NULL;
