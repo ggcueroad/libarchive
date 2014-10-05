@@ -82,6 +82,7 @@ __FBSDID("$FreeBSD: src/usr.bin/cpio/cpio.c,v 1.15 2008/12/06 07:30:40 kientzle 
 #include "cpio.h"
 #include "err.h"
 #include "line_reader.h"
+#include "passphrase.h"
 
 /* Fixed size of uname/gname caches. */
 #define	name_cache_size 101
@@ -123,6 +124,8 @@ static int	restore_time(struct cpio *, struct archive_entry *,
 		    const char *, int fd);
 static void	usage(void);
 static void	version(void);
+static const char * passphrase_callback(struct archive *, void *);
+static void	passphrase_free(char *);
 
 int
 main(int argc, char *argv[])
@@ -261,6 +264,7 @@ main(int argc, char *argv[])
 			cpio->option_link = 1;
 			break;
 		case OPTION_LRZIP:
+		case OPTION_LZ4:
 		case OPTION_LZMA: /* GNU tar, others */
 		case OPTION_LZOP: /* GNU tar, others */
 			cpio->compress = opt;
@@ -289,6 +293,9 @@ main(int argc, char *argv[])
 				    "Cannot use both -p and -%c", cpio->mode);
 			cpio->mode = opt;
 			cpio->extract_flags &= ~ARCHIVE_EXTRACT_SECURE_NODOTDOT;
+			break;
+		case OPTION_PASSPHRASE:
+			cpio->passphrase = cpio->argument;
 			break;
 		case OPTION_PRESERVE_OWNER:
 			cpio->extract_flags |= ARCHIVE_EXTRACT_OWNER;
@@ -418,6 +425,7 @@ main(int argc, char *argv[])
 	free_cache(cpio->gname_cache);
 	free_cache(cpio->uname_cache);
 	free(cpio->destdir);
+	passphrase_free(cpio->ppbuff);
 	return (cpio->return_value);
 }
 
@@ -526,6 +534,9 @@ mode_out(struct cpio *cpio)
 	case OPTION_LRZIP:
 		r = archive_write_add_filter_lrzip(cpio->archive);
 		break;
+	case OPTION_LZ4:
+		r = archive_write_add_filter_lz4(cpio->archive);
+		break;
 	case OPTION_LZMA:
 		r = archive_write_add_filter_lzma(cpio->archive);
 		break;
@@ -567,6 +578,14 @@ mode_out(struct cpio *cpio)
 	cpio->linkresolver = archive_entry_linkresolver_new();
 	archive_entry_linkresolver_set_strategy(cpio->linkresolver,
 	    archive_format(cpio->archive));
+	if (cpio->passphrase != NULL)
+		r = archive_write_set_passphrase(cpio->archive,
+			cpio->passphrase);
+	else
+		r = archive_write_set_passphrase_callback(cpio->archive, cpio,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(cpio->archive));
 
 	/*
 	 * The main loop:  Copy each file into the output archive.
@@ -933,6 +952,13 @@ mode_in(struct cpio *cpio)
 		lafe_errc(1, 0, "Couldn't allocate archive object");
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
+	if (cpio->passphrase != NULL)
+		r = archive_read_add_passphrase(a, cpio->passphrase);
+	else
+		r = archive_read_set_passphrase_callback(a, cpio,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 
 	if (archive_read_open_filename(a, cpio->filename,
 					cpio->bytes_per_block))
@@ -1036,6 +1062,13 @@ mode_list(struct cpio *cpio)
 		lafe_errc(1, 0, "Couldn't allocate archive object");
 	archive_read_support_filter_all(a);
 	archive_read_support_format_all(a);
+	if (cpio->passphrase != NULL)
+		r = archive_read_add_passphrase(a, cpio->passphrase);
+	else
+		r = archive_read_set_passphrase_callback(a, cpio,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 
 	if (archive_read_open_filename(a, cpio->filename,
 					cpio->bytes_per_block))
@@ -1406,4 +1439,29 @@ cpio_i64toa(int64_t n0)
 	if (n0 < 0)
 		*--p = '-';
 	return p;
+}
+
+#define PPBUFF_SIZE 1024
+static const char *
+passphrase_callback(struct archive *a, void *_client_data)
+{
+	struct cpio *cpio = (struct cpio *)_client_data;
+	(void)a; /* UNUSED */
+
+	if (cpio->ppbuff == NULL) {
+		cpio->ppbuff = malloc(PPBUFF_SIZE);
+		if (cpio->ppbuff == NULL)
+			lafe_errc(1, errno, "Out of memory");
+	}
+	return lafe_readpassphrase("Enter passphrase:",
+		cpio->ppbuff, PPBUFF_SIZE);
+}
+
+static void
+passphrase_free(char *ppbuff)
+{
+	if (ppbuff != NULL) {
+		memset(ppbuff, 0, PPBUFF_SIZE);
+		free(ppbuff);
+	}
 }

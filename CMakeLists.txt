@@ -541,7 +541,9 @@ LA_CHECK_INCLUDE_FILE("memory.h" HAVE_MEMORY_H)
 LA_CHECK_INCLUDE_FILE("paths.h" HAVE_PATHS_H)
 LA_CHECK_INCLUDE_FILE("poll.h" HAVE_POLL_H)
 LA_CHECK_INCLUDE_FILE("process.h" HAVE_PROCESS_H)
+LA_CHECK_INCLUDE_FILE("pthread.h" HAVE_PTHREAD_H)
 LA_CHECK_INCLUDE_FILE("pwd.h" HAVE_PWD_H)
+LA_CHECK_INCLUDE_FILE("readpassphrase.h" HAVE_READPASSPHRASE_H)
 LA_CHECK_INCLUDE_FILE("regex.h" HAVE_REGEX_H)
 LA_CHECK_INCLUDE_FILE("signal.h" HAVE_SIGNAL_H)
 LA_CHECK_INCLUDE_FILE("spawn.h" HAVE_SPAWN_H)
@@ -603,6 +605,7 @@ IF(ENABLE_NETTLE)
     SET(HAVE_NETTLE_SHA_H 1)
     INCLUDE_DIRECTORIES(${NETTLE_INCLUDE_DIR})
     LIST(APPEND ADDITIONAL_LIBS ${NETTLE_LIBRARIES})
+    LA_CHECK_INCLUDE_FILE("nettle/pbkdf2.h" HAVE_NETTLE_PBKDF2_H)
   ENDIF(NETTLE_FOUND)
   MARK_AS_ADVANCED(CLEAR NETTLE_INCLUDE_DIR)
   MARK_AS_ADVANCED(CLEAR NETTLE_LIBRARIES)
@@ -632,7 +635,7 @@ ENDIF(NOT OPENSSL_FOUND)
 
 #
 # How to prove that CRYPTO functions, which have several names on various
-# platforms, just see if archive_crypto.c can compile and link against
+# platforms, just see if archive_digest.c can compile and link against
 # required libraries.
 #
 MACRO(CHECK_CRYPTO ALGORITHMS IMPLEMENTATION)
@@ -671,7 +674,7 @@ MACRO(CHECK_CRYPTO ALGORITHMS IMPLEMENTATION)
       ${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/confdefs.h)
 	FILE(READ "${CMAKE_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/CMakeTmp/confdefs.h"
 	     CONFDEFS_H)
-	FILE(READ "${CMAKE_CURRENT_SOURCE_DIR}/libarchive/archive_crypto.c"
+	FILE(READ "${CMAKE_CURRENT_SOURCE_DIR}/libarchive/archive_digest.c"
 	     ARCHIVE_CRYPTO_C)
 
 	SET(SOURCE "${CONFDEFS_H}
@@ -821,14 +824,16 @@ ENDMACRO(CHECK_CRYPTO_WIN CRYPTO_LIST)
 MACRO(CHECK_ICONV LIB TRY_ICONV_CONST)
   IF(NOT HAVE_ICONV)
     CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
-    IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+    IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$" OR
+        "CMAKE_C_COMPILER_ID" MATCHES "^Clang$")
       #
       # During checking iconv proto type, we should use -Werror to avoid the
       # success of iconv detection with a warnig which success is a miss
       # detection. So this needs for all build mode(even it's a release mode).
       #
       SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror")
-    ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+    ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$" OR
+           "CMAKE_C_COMPILER_ID" MATCHES "^Clang$")
     IF (MSVC)
       # NOTE: /WX option is the same as gcc's -Werror option.
       SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} /WX")
@@ -1106,15 +1111,18 @@ ENDIF(NOT FOUND_POSIX_REGEX_LIB AND POSIX_REGEX_LIB MATCHES "^(AUTO|LIBPCREPOSIX
 # Check functions
 #
 CMAKE_PUSH_CHECK_STATE()	# Save the state of the variables
-IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+IF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$" OR
+    "CMAKE_C_COMPILER_ID" MATCHES "^Clang$")
   #
   # During checking functions, we should use -fno-builtin to avoid the
   # failure of function detection which failure is an error "conflicting
   # types for built-in function" caused by using -Werror option.
   #
   SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -fno-builtin")
-ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$")
+ENDIF ("CMAKE_C_COMPILER_ID" MATCHES "^GNU$" OR
+       "CMAKE_C_COMPILER_ID" MATCHES "^Clang$")
 CHECK_SYMBOL_EXISTS(_CrtSetReportMode "crtdbg.h" HAVE__CrtSetReportMode)
+CHECK_FUNCTION_EXISTS_GLIBC(arc4random_buf HAVE_ARC4RANDOM_BUF)
 CHECK_FUNCTION_EXISTS_GLIBC(chflags HAVE_CHFLAGS)
 CHECK_FUNCTION_EXISTS_GLIBC(chown HAVE_CHOWN)
 CHECK_FUNCTION_EXISTS_GLIBC(chroot HAVE_CHROOT)
@@ -1162,6 +1170,7 @@ CHECK_FUNCTION_EXISTS_GLIBC(pipe HAVE_PIPE)
 CHECK_FUNCTION_EXISTS_GLIBC(poll HAVE_POLL)
 CHECK_FUNCTION_EXISTS_GLIBC(posix_spawnp HAVE_POSIX_SPAWNP)
 CHECK_FUNCTION_EXISTS_GLIBC(readlink HAVE_READLINK)
+CHECK_FUNCTION_EXISTS_GLIBC(readpassphrase HAVE_READPASSPHRASE)
 CHECK_FUNCTION_EXISTS_GLIBC(select HAVE_SELECT)
 CHECK_FUNCTION_EXISTS_GLIBC(setenv HAVE_SETENV)
 CHECK_FUNCTION_EXISTS_GLIBC(setlocale HAVE_SETLOCALE)

@@ -236,6 +236,13 @@ tar_mode_c(struct bsdtar *bsdtar)
 	}
 
 	set_writer_options(bsdtar, a);
+	if (bsdtar->passphrase != NULL)
+		r = archive_write_set_passphrase(a, bsdtar->passphrase);
+	else
+		r = archive_write_set_passphrase_callback(a, bsdtar,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 	if (ARCHIVE_OK != archive_write_open_filename(a, bsdtar->filename))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 	write_archive(a, bsdtar);
@@ -647,8 +654,15 @@ append_archive_filename(struct bsdtar *bsdtar, struct archive *a,
 	ina = archive_read_new();
 	archive_read_support_format_all(ina);
 	archive_read_support_filter_all(ina);
-	set_reader_options(bsdtar, a);
+	set_reader_options(bsdtar, ina);
 	archive_read_set_options(ina, "mtree:checkfs");
+	if (bsdtar->passphrase != NULL)
+		rc = archive_read_add_passphrase(a, bsdtar->passphrase);
+	else
+		rc = archive_read_set_passphrase_callback(ina, bsdtar,
+			&passphrase_callback);
+	if (rc != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 	if (archive_read_open_filename(ina, filename,
 					bsdtar->bytes_per_block)) {
 		lafe_warnc(0, "%s", archive_error_string(ina));

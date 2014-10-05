@@ -24,7 +24,7 @@ DISTCHECK_CONFIGURE_FLAGS = --enable-bsdtar --enable-bsdcpio --enable-bsdpax
 COMMON_CFLAGS=-Wall -Wformat -Wformat-security
 # The next line is commented out by default in shipping libarchive releases.
 # It is uncommented by default in trunk.
-DEV_CFLAGS=-Werror -Wextra -Wunused -Wshadow -Wmissing-prototypes -Wcast-qual
+DEV_CFLAGS=-Werror -Wextra -Wunused -Wshadow -Wmissing-prototypes -Wcast-qual -g
 AM_CFLAGS=$(COMMON_CFLAGS) $(DEV_CFLAGS)
 PLATFORMCPPFLAGS = @PLATFORMCPPFLAGS@
 AM_CPPFLAGS=$(PLATFORMCPPFLAGS)
@@ -101,8 +101,10 @@ libarchive_la_SOURCES= \
 	libarchive/archive_cmdline.c \
 	libarchive/archive_cmdline_private.h \
 	libarchive/archive_crc32.h \
-	libarchive/archive_crypto.c \
-	libarchive/archive_crypto_private.h \
+	libarchive/archive_cryptor.c \
+	libarchive/archive_cryptor_private.h \
+	libarchive/archive_digest.c \
+	libarchive/archive_digest_private.h \
 	libarchive/archive_endian.h \
 	libarchive/archive_entry.c \
 	libarchive/archive_entry.h \
@@ -115,6 +117,8 @@ libarchive_la_SOURCES= \
 	libarchive/archive_entry_strmode.c \
 	libarchive/archive_entry_xattr.c \
 	libarchive/archive_getdate.c \
+	libarchive/archive_hmac.c \
+	libarchive/archive_hmac_private.h \
 	libarchive/archive_match.c \
 	libarchive/archive_options.c \
 	libarchive/archive_options_private.h \
@@ -127,9 +131,12 @@ libarchive_la_SOURCES= \
 	libarchive/archive_ppmd7.c \
 	libarchive/archive_ppmd7_private.h \
 	libarchive/archive_private.h \
+	libarchive/archive_random.c \
+	libarchive/archive_random_private.h \
 	libarchive/archive_rb.c \
 	libarchive/archive_rb.h \
 	libarchive/archive_read.c \
+	libarchive/archive_read_add_passphrase.c \
 	libarchive/archive_read_append_filter.c \
 	libarchive/archive_read_data_into_fd.c \
 	libarchive/archive_read_disk_entry_from_file.c \
@@ -198,6 +205,7 @@ libarchive_la_SOURCES= \
 	libarchive/archive_write_add_filter_grzip.c \
 	libarchive/archive_write_add_filter_gzip.c \
 	libarchive/archive_write_add_filter_lrzip.c \
+	libarchive/archive_write_add_filter_lz4.c \
 	libarchive/archive_write_add_filter_lzop.c \
 	libarchive/archive_write_add_filter_none.c \
 	libarchive/archive_write_add_filter_program.c \
@@ -221,12 +229,12 @@ libarchive_la_SOURCES= \
 	libarchive/archive_write_set_format_xar.c \
 	libarchive/archive_write_set_format_zip.c \
 	libarchive/archive_write_set_options.c \
+	libarchive/archive_write_set_passphrase.c \
 	libarchive/archive_xxhash.h \
 	libarchive/config_freebsd.h \
 	libarchive/filter_fork_posix.c \
 	libarchive/filter_fork.h \
-	libarchive/xxhash.c \
-	libarchive/xxhash.h
+	libarchive/xxhash.c
 
 if INC_WINDOWS_FILES
 libarchive_la_SOURCES+= \
@@ -253,6 +261,7 @@ libarchive_man_MANS= \
 	libarchive/archive_entry_stat.3 \
 	libarchive/archive_entry_time.3 \
 	libarchive/archive_read.3 \
+	libarchive/archive_read_add_passphrase.3 \
 	libarchive/archive_read_data.3 \
 	libarchive/archive_read_disk.3 \
 	libarchive/archive_read_extract.3 \
@@ -276,6 +285,7 @@ libarchive_man_MANS= \
 	libarchive/archive_write_new.3 \
 	libarchive/archive_write_open.3 \
 	libarchive/archive_write_set_options.3 \
+	libarchive/archive_write_set_passphrase.3 \
 	libarchive/cpio.5 \
 	libarchive/libarchive.3 \
 	libarchive/libarchive_changes.3 \
@@ -320,12 +330,13 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_archive_api_feature.c \
 	libarchive/test/test_archive_clear_error.c \
 	libarchive/test/test_archive_cmdline.c \
-	libarchive/test/test_archive_crypto.c \
+	libarchive/test/test_archive_digest.c \
 	libarchive/test/test_archive_getdate.c \
 	libarchive/test/test_archive_match_owner.c \
 	libarchive/test/test_archive_match_path.c \
 	libarchive/test/test_archive_match_time.c \
 	libarchive/test/test_archive_pathmatch.c \
+	libarchive/test/test_archive_read_add_passphrase.c \
 	libarchive/test/test_archive_read_close_twice.c \
 	libarchive/test/test_archive_read_close_twice_open_fd.c \
 	libarchive/test/test_archive_read_close_twice_open_filename.c \
@@ -347,6 +358,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_archive_write_set_format_option.c \
 	libarchive/test/test_archive_write_set_option.c \
 	libarchive/test/test_archive_write_set_options.c \
+	libarchive/test/test_archive_write_set_passphrase.c \
 	libarchive/test/test_bad_fd.c \
 	libarchive/test/test_compat_bzip2.c \
 	libarchive/test/test_compat_cpio.c \
@@ -418,6 +430,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_gtar_gz.c \
 	libarchive/test/test_read_format_gtar_lzma.c \
 	libarchive/test/test_read_format_gtar_sparse.c \
+	libarchive/test/test_read_format_gtar_sparse_skip_entry.c \
 	libarchive/test/test_read_format_iso_Z.c \
 	libarchive/test/test_read_format_iso_multi_extent.c \
 	libarchive/test/test_read_format_iso_xorriso.c \
@@ -463,6 +476,9 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_read_format_zip_nofiletype.c \
 	libarchive/test/test_read_format_zip_padded.c \
 	libarchive/test/test_read_format_zip_sfx.c \
+	libarchive/test/test_read_format_zip_traditional_encryption_data.c \
+	libarchive/test/test_read_format_zip_winzip_aes.c \
+	libarchive/test/test_read_format_zip_winzip_aes_large.c \
 	libarchive/test/test_read_format_zip_zip64.c \
 	libarchive/test/test_read_large.c \
 	libarchive/test/test_read_pax_truncated.c \
@@ -494,6 +510,7 @@ libarchive_test_SOURCES= \
 	libarchive/test/test_write_filter_gzip.c \
 	libarchive/test/test_write_filter_gzip_timestamp.c \
 	libarchive/test/test_write_filter_lrzip.c \
+	libarchive/test/test_write_filter_lz4.c \
 	libarchive/test/test_write_filter_lzip.c \
 	libarchive/test/test_write_filter_lzma.c \
 	libarchive/test/test_write_filter_lzop.c \
@@ -683,6 +700,7 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_gtar_sparse_1_17_posix01.tar.uu \
 	libarchive/test/test_read_format_gtar_sparse_1_17_posix10.tar.uu \
 	libarchive/test/test_read_format_gtar_sparse_1_17_posix10_modified.tar.uu \
+	libarchive/test/test_read_format_gtar_sparse_skip_entry.tar.Z.uu \
 	libarchive/test/test_read_format_iso.iso.Z.uu \
 	libarchive/test/test_read_format_iso_2.iso.Z.uu \
 	libarchive/test/test_read_format_iso_joliet.iso.Z.uu \
@@ -757,7 +775,12 @@ libarchive_test_EXTRA_DIST=\
 	libarchive/test/test_read_format_zip_padded3.zip.uu \
 	libarchive/test/test_read_format_zip_sfx.uu \
 	libarchive/test/test_read_format_zip_symlink.zip.uu \
+	libarchive/test/test_read_format_zip_traditional_encryption_data.zip.uu \
 	libarchive/test/test_read_format_zip_ux.zip.uu \
+	libarchive/test/test_read_format_zip_winzip_aes128.zip.uu \
+	libarchive/test/test_read_format_zip_winzip_aes256.zip.uu \
+	libarchive/test/test_read_format_zip_winzip_aes256_large.zip.uu \
+	libarchive/test/test_read_format_zip_winzip_aes256_stored.zip.uu \
 	libarchive/test/test_read_format_zip_zip64a.zip.uu \
 	libarchive/test/test_read_format_zip_zip64b.zip.uu \
 	libarchive/test/test_read_large_splitted_rar_aa.uu \
@@ -787,7 +810,9 @@ libarchive_fe_la_SOURCES= \
 	libarchive_fe/err.h \
 	libarchive_fe/lafe_platform.h \
 	libarchive_fe/line_reader.c \
-	libarchive_fe/line_reader.h
+	libarchive_fe/line_reader.h \
+	libarchive_fe/passphrase.c \
+	libarchive_fe/passphrase.h
 
 libarchive_fe_la_CPPFLAGS= -I$(top_srcdir)/libarchive
 #
@@ -861,6 +886,7 @@ bsdtar_test_SOURCES= \
 	tar/test/test_extract_tar_gz.c \
 	tar/test/test_extract_tar_lrz.c \
 	tar/test/test_extract_tar_lz.c \
+	tar/test/test_extract_tar_lz4.c \
 	tar/test/test_extract_tar_lzma.c \
 	tar/test/test_extract_tar_lzo.c \
 	tar/test/test_extract_tar_xz.c \
@@ -883,12 +909,14 @@ bsdtar_test_SOURCES= \
 	tar/test/test_option_k.c \
 	tar/test/test_option_keep_newer_files.c \
 	tar/test/test_option_lrzip.c \
+	tar/test/test_option_lz4.c \
 	tar/test/test_option_lzma.c \
 	tar/test/test_option_lzop.c \
 	tar/test/test_option_n.c \
 	tar/test/test_option_newer_than.c \
 	tar/test/test_option_nodump.c \
 	tar/test/test_option_older_than.c \
+	tar/test/test_option_passphrase.c \
 	tar/test/test_option_q.c \
 	tar/test/test_option_r.c \
 	tar/test/test_option_s.c \
@@ -929,10 +957,12 @@ bsdtar_test_EXTRA_DIST= \
 	tar/test/test_extract.tar.gz.uu \
 	tar/test/test_extract.tar.lrz.uu \
 	tar/test/test_extract.tar.lz.uu \
+	tar/test/test_extract.tar.lz4.uu \
 	tar/test/test_extract.tar.lzma.uu \
 	tar/test/test_extract.tar.lzo.uu \
 	tar/test/test_extract.tar.xz.uu \
 	tar/test/test_option_keep_newer_files.tar.Z.uu \
+	tar/test/test_option_passphrase.zip.uu \
 	tar/test/test_option_s.tar.Z.uu \
 	tar/test/test_patterns_2.tar.uu \
 	tar/test/test_patterns_3.tar.uu \
@@ -1009,6 +1039,7 @@ bsdcpio_test_SOURCES= \
 	cpio/test/test_extract_cpio_gz.c \
 	cpio/test/test_extract_cpio_lrz.c \
 	cpio/test/test_extract_cpio_lz.c \
+	cpio/test/test_extract_cpio_lz4.c \
 	cpio/test/test_extract_cpio_lzma.c \
 	cpio/test/test_extract_cpio_lzo.c \
 	cpio/test/test_extract_cpio_xz.c \
@@ -1029,9 +1060,11 @@ bsdcpio_test_SOURCES= \
 	cpio/test/test_option_help.c \
 	cpio/test/test_option_l.c \
 	cpio/test/test_option_lrzip.c \
+	cpio/test/test_option_lz4.c \
 	cpio/test/test_option_lzma.c \
 	cpio/test/test_option_lzop.c \
 	cpio/test/test_option_m.c \
+	cpio/test/test_option_passphrase.c \
 	cpio/test/test_option_t.c \
 	cpio/test/test_option_u.c \
 	cpio/test/test_option_uuencode.c \
@@ -1069,6 +1102,7 @@ bsdcpio_test_EXTRA_DIST= \
 	cpio/test/test_extract.cpio.gz.uu \
 	cpio/test/test_extract.cpio.lrz.uu \
 	cpio/test/test_extract.cpio.lz.uu \
+	cpio/test/test_extract.cpio.lz4.uu \
 	cpio/test/test_extract.cpio.lzma.uu \
 	cpio/test/test_extract.cpio.lzo.uu \
 	cpio/test/test_extract.cpio.xz.uu \
@@ -1082,6 +1116,7 @@ bsdcpio_test_EXTRA_DIST= \
 	cpio/test/test_gcpio_compat_ref_nosym.ustar.uu \
 	cpio/test/test_option_f.cpio.uu \
 	cpio/test/test_option_m.cpio.uu \
+	cpio/test/test_option_passphrase.zip.uu \
 	cpio/test/test_option_t.cpio.uu \
 	cpio/test/test_option_t.stdout.uu \
 	cpio/test/test_option_tv.stdout.uu \
@@ -1139,11 +1174,15 @@ bsdcat_test_SOURCES= \
 	cat/test/main.c \
 	cat/test/test.h \
 	cat/test/test_0.c \
+	cat/test/test_empty_gz.c \
+	cat/test/test_empty_lz4.c \
+	cat/test/test_empty_xz.c \
 	cat/test/test_error.c \
 	cat/test/test_error_mixed.c \
 	cat/test/test_expand_Z.c \
 	cat/test/test_expand_bz2.c \
 	cat/test/test_expand_gz.c \
+	cat/test/test_expand_lz4.c \
 	cat/test/test_expand_mixed.c \
 	cat/test/test_expand_plain.c \
 	cat/test/test_expand_xz.c \
@@ -1170,9 +1209,13 @@ endif
 
 bsdcat_test_EXTRA_DIST= \
 	cat/test/list.h \
+	cat/test/test_empty.gz.uu \
+	cat/test/test_empty.lz4.uu \
+	cat/test/test_empty.xz.uu \
 	cat/test/test_expand.Z.uu \
 	cat/test/test_expand.bz2.uu \
 	cat/test/test_expand.gz.uu \
+	cat/test/test_expand.lz4.uu \
 	cat/test/test_expand.plain.uu \
 	cat/test/test_expand.xz.uu \
 	cat/test/CMakeLists.txt

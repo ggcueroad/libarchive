@@ -19,6 +19,7 @@ IF(ENABLE_CPIO AND ENABLE_TEST)
     test_extract_cpio_gz
     test_extract_cpio_lrz
     test_extract_cpio_lz
+    test_extract_cpio_lz4
     test_extract_cpio_lzma
     test_extract_cpio_lzo
     test_extract_cpio_xz
@@ -39,9 +40,11 @@ IF(ENABLE_CPIO AND ENABLE_TEST)
     test_option_help.c
     test_option_l.c
     test_option_lrzip.c
+    test_option_lz4.c
     test_option_lzma.c
     test_option_lzop.c
     test_option_m.c
+    test_option_passphrase.c
     test_option_t.c
     test_option_u.c
     test_option_uuencode.c
@@ -82,7 +85,7 @@ IF(ENABLE_CPIO AND ENABLE_TEST)
 
   INCLUDE(${CMAKE_CURRENT_BINARY_DIR}/list.h)
   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/test_utils)
+  INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/test_utils)
 
   # Experimental new test handling
   ADD_CUSTOM_TARGET(run_bsdcpio_test

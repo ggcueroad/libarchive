@@ -17,12 +17,13 @@ IF(ENABLE_TEST)
     test_archive_api_feature.c
     test_archive_clear_error.c
     test_archive_cmdline.c
-    test_archive_crypto.c
+    test_archive_digest.c
     test_archive_getdate.c
     test_archive_match_owner.c
     test_archive_match_path.c
     test_archive_match_time.c
     test_archive_pathmatch.c
+    test_archive_read_add_passphrase.c
     test_archive_read_close_twice.c
     test_archive_read_close_twice_open_fd.c
     test_archive_read_close_twice_open_filename.c
@@ -44,6 +45,7 @@ IF(ENABLE_TEST)
     test_archive_write_set_format_option.c
     test_archive_write_set_option.c
     test_archive_write_set_options.c
+    test_archive_write_set_passphrase.c
     test_bad_fd.c
     test_compat_bzip2.c
     test_compat_cpio.c
@@ -115,6 +117,7 @@ IF(ENABLE_TEST)
     test_read_format_gtar_gz.c
     test_read_format_gtar_lzma.c
     test_read_format_gtar_sparse.c
+    test_read_format_gtar_sparse_skip_entry.c
     test_read_format_iso_Z.c
     test_read_format_iso_multi_extent.c
     test_read_format_iso_xorriso.c
@@ -160,6 +163,9 @@ IF(ENABLE_TEST)
     test_read_format_zip_nofiletype.c
     test_read_format_zip_padded.c
     test_read_format_zip_sfx.c
+    test_read_format_zip_traditional_encryption_data.c
+    test_read_format_zip_winzip_aes.c
+    test_read_format_zip_winzip_aes_large.c
     test_read_format_zip_zip64.c
     test_read_large.c
     test_read_pax_truncated.c
@@ -191,6 +197,7 @@ IF(ENABLE_TEST)
     test_write_filter_gzip.c
     test_write_filter_gzip_timestamp.c
     test_write_filter_lrzip.c
+    test_write_filter_lz4.c
     test_write_filter_lzip.c
     test_write_filter_lzma.c
     test_write_filter_lzop.c

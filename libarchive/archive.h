@@ -218,6 +218,13 @@ typedef int archive_switch_callback(struct archive *, void *_client_data1,
 			    void *_client_data2);
 
 /*
+ * Returns a passphrase used for encryption or decryption, NULL on nothing
+ * to do and give it up.
+ */
+typedef const char *archive_passphrase_callback(struct archive *,
+			    void *_client_data);
+
+/*
  * Codes to identify various stream filters.
  */
 #define	ARCHIVE_FILTER_NONE	0
@@ -582,6 +589,14 @@ __LA_DECL int archive_read_set_option(struct archive *_a,
 __LA_DECL int archive_read_set_options(struct archive *_a,
 			    const char *opts);
 
+/*
+ * Add a decryption passphrase.
+ */
+__LA_DECL int archive_read_add_passphrase(struct archive *, const char *);
+__LA_DECL int archive_read_set_passphrase_callback(struct archive *,
+			    void *client_data, archive_passphrase_callback *);
+
+
 /*-
  * Convenience function to recreate the current entry (whose header
  * has just been read) on disk.
@@ -715,6 +730,7 @@ __LA_DECL int archive_write_add_filter_compress(struct archive *);
 __LA_DECL int archive_write_add_filter_grzip(struct archive *);
 __LA_DECL int archive_write_add_filter_gzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lrzip(struct archive *);
+__LA_DECL int archive_write_add_filter_lz4(struct archive *);
 __LA_DECL int archive_write_add_filter_lzip(struct archive *);
 __LA_DECL int archive_write_add_filter_lzma(struct archive *);
 __LA_DECL int archive_write_add_filter_lzop(struct archive *);
@@ -813,6 +829,13 @@ __LA_DECL int archive_write_set_option(struct archive *_a,
 /* Apply option string to both the format and the filter. */
 __LA_DECL int archive_write_set_options(struct archive *_a,
 			    const char *opts);
+
+/*
+ * Set a encryption passphrase.
+ */
+__LA_DECL int archive_write_set_passphrase(struct archive *_a, const char *p);
+__LA_DECL int archive_write_set_passphrase_callback(struct archive *,
+			    void *client_data, archive_passphrase_callback *);
 
 /*-
  * ARCHIVE_WRITE_DISK API

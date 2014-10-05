@@ -9,11 +9,15 @@ IF(ENABLE_CAT AND ENABLE_TEST)
     main.c
     test.h
     test_0.c
+    test_empty_gz.c
+    test_empty_lz4.c
+    test_empty_xz.c
     test_error.c
     test_error_mixed.c
     test_expand_Z.c
     test_expand_bz2.c
     test_expand_gz.c
+    test_expand_lz4.c
     test_expand_mixed.c
     test_expand_plain.c
     test_expand_xz.c
@@ -49,7 +53,7 @@ IF(ENABLE_CAT AND ENABLE_TEST)
 
   INCLUDE(${CMAKE_CURRENT_BINARY_DIR}/list.h)
   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/test_utils)
+  INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/test_utils)
 
   # Experimental new test handling
   ADD_CUSTOM_TARGET(run_bsdcat_test

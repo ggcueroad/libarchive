@@ -315,7 +315,8 @@ AS_VAR_IF([ac_cv_have_decl_EXT2_IOC_GETFLAGS], [yes],
 
 AC_CHECK_HEADERS([inttypes.h io.h langinfo.h limits.h])
 AC_CHECK_HEADERS([linux/fiemap.h linux/fs.h linux/magic.h linux/types.h])
-AC_CHECK_HEADERS([locale.h paths.h poll.h pwd.h signal.h spawn.h])
+AC_CHECK_HEADERS([locale.h paths.h poll.h pthread.h pwd.h])
+AC_CHECK_HEADERS([readpassphrase.h signal.h spawn.h])
 AC_CHECK_HEADERS([stdarg.h stdint.h stdlib.h string.h])
 AC_CHECK_HEADERS([sys/acl.h sys/cdefs.h sys/extattr.h])
 AC_CHECK_HEADERS([sys/ioctl.h sys/mkdev.h sys/mount.h])
@@ -617,7 +618,7 @@ AC_FUNC_VPRINTF
 # To avoid necessity for including windows.h or special forward declaration
 # workarounds, we use 'void *' for 'struct SECURITY_ATTRIBUTES *'
 AC_CHECK_STDCALL_FUNC([CreateHardLinkA],[const char *, const char *, void *])
-AC_CHECK_FUNCS([chflags chown chroot ctime_r dirfd])
+AC_CHECK_FUNCS([arc4random_buf chflags chown chroot ctime_r dirfd])
 AC_CHECK_FUNCS([fchdir fchflags fchmod fchown fcntl fdopendir fork])
 AC_CHECK_FUNCS([fstat fstatat fstatfs fstatvfs ftruncate])
 AC_CHECK_FUNCS([futimens futimes futimesat])
@@ -627,6 +628,7 @@ AC_CHECK_FUNCS([lchflags lchmod lchown link localtime_r lstat lutimes])
 AC_CHECK_FUNCS([mbrtowc memmove memset])
 AC_CHECK_FUNCS([mkdir mkfifo mknod mkstemp])
 AC_CHECK_FUNCS([nl_langinfo openat pipe poll posix_spawnp readlink readlinkat])
+AC_CHECK_FUNCS([readpassphrase])
 AC_CHECK_FUNCS([select setenv setlocale sigaction statfs statvfs])
 AC_CHECK_FUNCS([strchr strdup strerror strncpy_s strrchr symlink timegm])
 AC_CHECK_FUNCS([tzset unsetenv utime utimensat utimes vfork])
@@ -747,7 +749,7 @@ AC_DEFUN([CRYPTO_CHECK], [
 #define ARCHIVE_CRYPTO_$1_$2
 #define PLATFORM_CONFIG_H "check_crypto_md.h"
 
-$(cat "$srcdir/libarchive/archive_crypto.c")
+$(cat "$srcdir/libarchive/archive_digest.c")
 
 int
 main(int argc, char **argv)
@@ -832,6 +834,8 @@ if test "x$with_nettle" != "xno"; then
     CRYPTO_CHECK(SHA512, NETTLE, sha512)
     if test "x$found_NETTLE" != "xyes"; then
       LIBS=$saved_LIBS
+    else
+      AC_CHECK_HEADERS([nettle/pbkdf2.h])
     fi
 fi
 if test "x$with_openssl" != "xno"; then
@@ -863,6 +867,8 @@ if test "x$with_openssl" != "xno"; then
     CRYPTO_CHECK(SHA512, OPENSSL, sha512)
     if test "x$found_OPENSSL" != "xyes"; then
       LIBS=$saved_LIBS
+    else
+      AC_CHECK_FUNCS([PKCS5_PBKDF2_HMAC_SHA1])
     fi
 fi
 

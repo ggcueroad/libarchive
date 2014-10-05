@@ -18,8 +18,10 @@ SET(libarchive_SOURCES
   archive_cmdline.c
   archive_cmdline_private.h
   archive_crc32.h
-  archive_crypto.c
-  archive_crypto_private.h
+  archive_cryptor.c
+  archive_cryptor_private.h
+  archive_digest.c
+  archive_digest_private.h
   archive_endian.h
   archive_entry.c
   archive_entry.h
@@ -32,6 +34,8 @@ SET(libarchive_SOURCES
   archive_entry_strmode.c
   archive_entry_xattr.c
   archive_getdate.c
+  archive_hmac.c
+  archive_hmac_private.h
   archive_match.c
   archive_options.c
   archive_options_private.h
@@ -44,9 +48,12 @@ SET(libarchive_SOURCES
   archive_ppmd7.c
   archive_ppmd7_private.h
   archive_private.h
+  archive_random.c
+  archive_random_private.h
   archive_rb.c
   archive_rb.h
   archive_read.c
+  archive_read_add_passphrase.c
   archive_read_append_filter.c
   archive_read_data_into_fd.c
   archive_read_disk_entry_from_file.c
@@ -115,6 +122,7 @@ SET(libarchive_SOURCES
   archive_write_add_filter_grzip.c
   archive_write_add_filter_gzip.c
   archive_write_add_filter_lrzip.c
+  archive_write_add_filter_lz4.c
   archive_write_add_filter_lzop.c
   archive_write_add_filter_none.c
   archive_write_add_filter_program.c
@@ -138,11 +146,11 @@ SET(libarchive_SOURCES
   archive_write_set_format_xar.c
   archive_write_set_format_zip.c
   archive_write_set_options.c
+  archive_write_set_passphrase.c
   archive_xxhash.h
   filter_fork_posix.c
   filter_fork.h
   xxhash.c
-  xxhash.h
 )
 
 # Man pages
@@ -155,12 +163,14 @@ SET(libarchive_MANS
   archive_entry_stat.3
   archive_entry_time.3
   archive_read.3
+  archive_read_add_passphrase.3
   archive_read_disk.3
   archive_read_set_options.3
   archive_util.3
   archive_write.3
   archive_write_disk.3
   archive_write_set_options.3
+  archive_write_set_passphrase.3
   cpio.5
   libarchive.3
   libarchive_internals.3
