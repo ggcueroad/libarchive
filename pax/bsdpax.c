@@ -292,6 +292,7 @@ main(int argc, char **argv)
 		case 'j':
 		case 'J':
 		case OPTION_LRZIP:
+		case OPTION_LZ4:
 		case OPTION_LZIP:
 		case OPTION_LZMA:
 		case OPTION_LZOP:
@@ -319,6 +320,9 @@ main(int argc, char **argv)
 			break;
 		case 'o':
 			bsdpax_add_options(bsdpax->options, bsdpax->argument);
+			break;
+		case OPTION_PASSPHRASE:
+			bsdpax->passphrase = bsdpax->argument;
 			break;
 		case 'P':
 			bsdpax->symlink_mode = opt;
@@ -541,6 +545,7 @@ main(int argc, char **argv)
 	cleanup_substitution(bsdpax);
 #endif
 	bsdpax_free_options(bsdpax->options);
+	passphrase_free(bsdpax->ppbuff);
 
 	if (bsdpax->return_value != 0)
 		lafe_warnc(0,
@@ -558,6 +563,10 @@ compression_name(char *name, size_t name_size, int compression)
 		break;
 	case OPTION_LRZIP:
 		strncpy(name, "--lrzip", name_size-1);
+		name[name_size-1] = '\0';
+		break;
+	case OPTION_LZ4:
+		strncpy(name, "--lz4", name_size-1);
 		name[name_size-1] = '\0';
 		break;
 	case OPTION_LZIP:

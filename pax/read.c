@@ -183,6 +183,13 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 		if (archive_read_set_options(a,
 		    "read_concatenated_archives") != ARCHIVE_OK)
 			lafe_errc(1, 0, "%s", archive_error_string(a));
+	if (bsdpax->passphrase != NULL)
+		r = archive_read_add_passphrase(a, bsdpax->passphrase);
+	else
+		r = archive_read_set_passphrase_callback(a, bsdpax,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 	if (archive_read_open_filename(a, bsdpax->filename,
 					bsdpax->bytes_per_block))
 		lafe_errc(1, 0, "Error opening archive: %s",
@@ -367,17 +374,21 @@ read_archive(struct bsdpax *bsdpax, char mode, struct archive *writer)
 	if (bsdpax->verbose) {
 		int i;
 
-		fprintf(stderr, "%s: %s,", lafe_progname, archive_format_name(a));
+		fprintf(stderr, "%s: %s,", lafe_getprogname(),
+			    archive_format_name(a));
 		for (i = 0; archive_filter_code(a, i) > 0; i++)
 			if (i > 0)
-				fprintf(stderr, "/%s", archive_filter_name(a, i));
+				fprintf(stderr, "/%s",
+					archive_filter_name(a, i));
 			else
-				fprintf(stderr, " %s", archive_filter_name(a, i));
+				fprintf(stderr, " %s",
+					archive_filter_name(a, i));
 		if (i > 0)
 			fprintf(stderr, " filters,");
 		fprintf(stderr,
 		    " %d files, %s bytes read, 0 bytes written\n",
-		    archive_file_count(a), pax_i64toa(archive_filter_bytes(a, 0)));
+		    archive_file_count(a),
+		    pax_i64toa(archive_filter_bytes(a, 0)));
 	}
 	if (mode == PAXMODE_READ)
 		archive_read_free(bsdpax->diskenough);

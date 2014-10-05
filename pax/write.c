@@ -167,6 +167,9 @@ pax_mode_write(struct bsdpax *bsdpax)
 		case OPTION_LRZIP:
 			r = archive_write_add_filter_lrzip(a);
 			break;
+		case OPTION_LZ4:
+			r = archive_write_add_filter_lz4(a);
+			break;
 		case OPTION_LZIP:
 			r = archive_write_add_filter_lzip(a);
 			break;
@@ -245,6 +248,13 @@ pax_mode_write(struct bsdpax *bsdpax)
 			lafe_errc(1, 0, "Out of memory");
 	}
 	bsdpax_set_options(bsdpax->options, archive_write_set_options, a);
+	if (bsdpax->passphrase != NULL)
+		r = archive_write_set_passphrase(a, bsdpax->passphrase);
+	else
+		r = archive_write_set_passphrase_callback(a, bsdpax,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 	if (ARCHIVE_OK != archive_write_open_filename(a, bsdpax->filename))
 		lafe_errc(1, 0, "%s", archive_error_string(a));
 	write_archive(a, bsdpax);
@@ -261,6 +271,7 @@ pax_mode_append(struct bsdpax *bsdpax)
 	struct archive		*a;
 	struct archive_entry	*entry;
 	int			 format;
+	int			 r;
 
 	format = ARCHIVE_FORMAT_TAR_PAX_RESTRICTED;
 
@@ -277,6 +288,13 @@ pax_mode_append(struct bsdpax *bsdpax)
 	archive_read_support_format_empty(a);
 	archive_read_support_format_tar(a);
 	archive_read_support_format_gnutar(a);
+	if (bsdpax->passphrase != NULL)
+		r = archive_read_add_passphrase(a, bsdpax->passphrase);
+	else
+		r = archive_read_set_passphrase_callback(a, bsdpax,
+			&passphrase_callback);
+	if (r != ARCHIVE_OK)
+		lafe_errc(1, 0, "%s", archive_error_string(a));
 	if (archive_read_open_fd(a, bsdpax->fd, bsdpax->bytes_per_block)
 	    != ARCHIVE_OK) {
 		lafe_errc(1, 0,
@@ -483,12 +501,15 @@ write_archive(struct archive *a, struct bsdpax *bsdpax)
 	if (bsdpax->verbose) {
 		int i;
 
-		fprintf(stderr, "%s: %s,", lafe_progname, archive_format_name(a));
+		fprintf(stderr, "%s: %s,", lafe_getprogname(),
+			archive_format_name(a));
 		for (i = 0; archive_filter_code(a, i) > 0; i++) {
 			if (i > 0)
-				fprintf(stderr, "/%s", archive_filter_name(a, i));
+				fprintf(stderr, "/%s",
+					archive_filter_name(a, i));
 			else
-				fprintf(stderr, " %s", archive_filter_name(a, i));
+				fprintf(stderr, " %s",
+					archive_filter_name(a, i));
 		}
 		if (i > 0)
 			fprintf(stderr, " filters,");

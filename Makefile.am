@@ -8,7 +8,7 @@ ACLOCAL_AMFLAGS = -I build/autoconf
 #
 lib_LTLIBRARIES=	libarchive.la
 noinst_LTLIBRARIES=	libarchive_fe.la
-bin_PROGRAMS=	$(bsdtar_programs) $(bsdcpio_programs) $(bsdcat_programs)
+bin_PROGRAMS=	$(bsdtar_programs) $(bsdcpio_programs) $(bsdcat_programs) $(bsdpax_programs)
 man_MANS= $(libarchive_man_MANS) $(bsdtar_man_MANS) $(bsdcpio_man_MANS) $(bsdcat_man_MANS) $(bsdpax_man_MANS)
 BUILT_SOURCES= libarchive/test/list.h tar/test/list.h cpio/test/list.h cat/test/list.h pax/test/list.h
 
@@ -1290,6 +1290,7 @@ bsdpax_test_SOURCES= \
 	pax/test/test_extract_tar_gz.c \
 	pax/test/test_extract_tar_lrz.c \
 	pax/test/test_extract_tar_lz.c \
+	pax/test/test_extract_tar_lz4.c \
 	pax/test/test_extract_tar_lzma.c \
 	pax/test/test_extract_tar_lzo.c \
 	pax/test/test_extract_tar_xz.c \
@@ -1313,12 +1314,14 @@ bsdpax_test_SOURCES= \
 	pax/test/test_option_k.c \
 	pax/test/test_option_l.c \
 	pax/test/test_option_lrzip.c \
+	pax/test/test_option_lz4.c \
 	pax/test/test_option_lzma.c \
 	pax/test/test_option_lzop.c \
 	pax/test/test_option_n.c \
 	pax/test/test_option_nodump.c \
 	pax/test/test_option_null.c \
 	pax/test/test_option_o.c \
+	pax/test/test_option_passphrase.c \
 	pax/test/test_option_s.c \
 	pax/test/test_option_t.c \
 	pax/test/test_option_u.c \
@@ -1356,10 +1359,12 @@ bsdpax_test_EXTRA_DIST= \
 	pax/test/test_extract.tar.gz.uu \
 	pax/test/test_extract.tar.lrz.uu \
 	pax/test/test_extract.tar.lz.uu \
+	pax/test/test_extract.tar.lz4.uu \
 	pax/test/test_extract.tar.lzma.uu \
 	pax/test/test_extract.tar.lzo.uu \
 	pax/test/test_extract.tar.xz.uu \
 	pax/test/test_option_T_upper.tar.uu \
 	pax/test/test_options_listopt.tar.Z.uu \
+	pax/test/test_options_passphrase.zip.uu \
 	pax/test/test_print_longpath.tar.Z.uu \
 	pax/test/CMakeLists.txt

@@ -16,6 +16,7 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test_extract_tar_gz.c
     test_extract_tar_lrz.c
     test_extract_tar_lz.c
+    test_extract_tar_lz4.c
     test_extract_tar_lzma.c
     test_extract_tar_lzo.c
     test_extract_tar_xz.c
@@ -39,12 +40,14 @@ IF(ENABLE_PAX AND ENABLE_TEST)
     test_option_k.c
     test_option_l.c
     test_option_lrzip.c
+    test_option_lz4.c
     test_option_lzma.c
     test_option_lzop.c
     test_option_n.c
     test_option_nodump.c
     test_option_null.c
     test_option_o.c
+    test_option_passphrase.c
     test_option_s.c
     test_option_t.c
     test_option_u.c
@@ -88,7 +91,7 @@ IF(ENABLE_PAX AND ENABLE_TEST)
 
   INCLUDE(${CMAKE_CURRENT_BINARY_DIR}/list.h)
   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-  INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/test_utils)
+  INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/test_utils)
 
   # Experimental new test handling
   ADD_CUSTOM_TARGET(run_bsdpax_test

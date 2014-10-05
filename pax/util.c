@@ -65,6 +65,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bsdpax.h"
 #include "err.h"
+#include "passphrase.h"
 
 static size_t	bsdpax_expand_char(char *, size_t, char);
 static const char *strip_components(const char *path, int elements);
@@ -266,7 +267,7 @@ pax_rename(struct bsdpax *bsdpax, struct archive_entry *entry)
 	if (!now)
 		time(&now);
 	fprintf(t, "\nATTENTION: %s interactive file rename operation.\n",
-	    lafe_progname);
+	    lafe_getprogname());
 	fprintf(t, "%s", archive_entry_strmode(entry));
 	/* Format the time using 'ls -l' conventions. */
 	tim = archive_entry_mtime(entry);
@@ -714,3 +715,27 @@ disk_new_enough(struct bsdpax *bsdpax, const char *path,
 	return (1);
 }
 
+#define PPBUFF_SIZE 1024
+const char *
+passphrase_callback(struct archive *a, void *_client_data)
+{
+	struct bsdpax *bsdpax = (struct bsdpax *)_client_data;
+	(void)a; /* UNUSED */
+
+	if (bsdpax->ppbuff == NULL) {
+		bsdpax->ppbuff = malloc(PPBUFF_SIZE);
+		if (bsdpax->ppbuff == NULL)
+			lafe_errc(1, errno, "Out of memory");
+	}
+	return lafe_readpassphrase("Enter passphrase:",
+		bsdpax->ppbuff, PPBUFF_SIZE);
+}
+
+void
+passphrase_free(char *ppbuff)
+{
+	if (ppbuff != NULL) {
+		memset(ppbuff, 0, PPBUFF_SIZE);
+		free(ppbuff);
+	}
+}

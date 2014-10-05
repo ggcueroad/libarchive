@@ -45,6 +45,7 @@ struct bsdpax {
 	const char	 *filename; /* -f filename */
 	const char	 *create_format; /* -x format */
 	const char	 *destdir; /* -r -w Copy mode */
+	const char	 *passphrase; /* --passphrase */
 	size_t		  destdir_len;
 	int64_t		  dest_dev;
 	int64_t		  dest_ino;
@@ -103,6 +104,7 @@ struct bsdpax {
 	uid_t		  user_uid; /* UID running this program */
 	int		  return_value; /* Value returned by main() */
 	char		  warned_lead_slash; /* Already displayed warning */
+	char		 *ppbuff;
 
 	/*
 	 * Data for various subsystems.  Full definitions are located in
@@ -137,11 +139,13 @@ enum {
 	OPTION_IGNORE_ZEROS,
 	OPTION_INSECURE,
 	OPTION_LRZIP,
+	OPTION_LZ4,
 	OPTION_LZIP,
 	OPTION_LZMA,
 	OPTION_LZOP,
 	OPTION_NODUMP,
 	OPTION_NULL,
+	OPTION_PASSPHRASE,
 	OPTION_STRIP_COMPONENTS,
 	OPTION_USE_COMPRESS_PROGRAM,
 	OPTION_UUENCODE,
@@ -166,7 +170,8 @@ int	add_group(struct bsdpax *bsdpax, const char *group);
 int	excluded_entry(struct bsdpax *bsdpax, struct archive_entry *entry);
 int	disk_new_enough(struct bsdpax *bsdpax, const char *path,
 	    struct archive_entry *entry, int);
-
+const char * passphrase_callback(struct archive *, void *);
+void	passphrase_free(char *);
 
 #if defined(HAVE_REGEX_H) || defined(HAVE_PCREPOSIX_H)
 void	add_substitution(struct bsdpax *, const char *);
