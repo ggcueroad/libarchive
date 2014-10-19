@@ -3126,10 +3126,9 @@ la_inflate_free(struct laz_stream *strm)
 #define laz_br_has(br, n)	((br)->cache_avail >= n)
 /* Get compressed data by bit. */
 #define laz_br_bits(br, n)				\
-	(((uint16_t)((br)->cache_buffer >>		\
-		((br)->cache_avail - (n)))) & cache_masks[n])
+	(((uint32_t)((br)->cache_buffer)) & cache_masks[n])
 #define laz_br_bits_forced(br, n)			\
-	(((uint16_t)((br)->cache_buffer <<		\
+	(((uint32_t)((br)->cache_buffer <<		\
 		((n) - (br)->cache_avail))) & cache_masks[n])
 /* Read ahead to make sure the cache buffer has enough compressed data we
  * will use.
@@ -3145,15 +3144,33 @@ la_inflate_free(struct laz_stream *strm)
 	(laz_br_read_ahead_0((strm), (br), (n)) || laz_br_has((br), (n)))
 
 /* Notify how many bits we consumed. */
-#define laz_br_consume(br, n)	((br)->cache_avail -= (n))
+#define laz_br_consume(br, n)				\
+	do {						\
+		(br)->cache_buffer >>= (n)		\
+		(br)->cache_avail -= (n)		\
+	} while (0)
 #define laz_br_unconsume(br, n)	((br)->cache_avail += (n))
+#define laz_br_consume_unaligned_bits(br)		\
+	do {						\
+		(br)->cache_buffer >>= ((br)->cache_avail & 0x0f);\
+		(br)->cache_avail &= ~0x0f;		\
+	} while (0)
+#define laz_br_reset(br)				\
+	do {						\
+		(br)->cache_buffer = 0;			\
+		(br)->cache_avail = 0;			\
+	} while (0)
 
-static const uint16_t cache_masks[] = {
-	0x0000, 0x0001, 0x0003, 0x0007,
-	0x000F, 0x001F, 0x003F, 0x007F,
-	0x00FF, 0x01FF, 0x03FF, 0x07FF,
-	0x0FFF, 0x1FFF, 0x3FFF, 0x7FFF,
-	0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF
+static const uint32_t cache_masks[] = {
+	0x00000000, 0x00000001, 0x00000003, 0x00000007,
+	0x0000000F, 0x0000001F, 0x0000003F, 0x0000007F,
+	0x000000FF, 0x000001FF, 0x000003FF, 0x000007FF,
+	0x00000FFF, 0x00001FFF, 0x00003FFF, 0x00007FFF,
+	0x0000FFFF, 0x0001FFFF, 0x0003FFFF, 0x0007FFFF,
+	0x000FFFFF, 0x001FFFFF, 0x003FFFFF, 0x007FFFFF,
+	0x00FFFFFF, 0x01FFFFFF, 0x03FFFFFF, 0x07FFFFFF,
+	0x0FFFFFFF, 0x1FFFFFFF, 0x3FFFFFFF, 0x7FFFFFFF,
+	0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
 };
 
 /*
@@ -3174,45 +3191,49 @@ laz_br_fillup(struct laz_stream *strm, struct laz_br *br)
 			switch (x) {
 			case 8:
 				br->cache_buffer =
-				    ((uint64_t)strm->next_in[0]) << 56 |
-				    ((uint64_t)strm->next_in[1]) << 48 |
-				    ((uint64_t)strm->next_in[2]) << 40 |
-				    ((uint64_t)strm->next_in[3]) << 32 |
-				    ((uint32_t)strm->next_in[4]) << 24 |
-				    ((uint32_t)strm->next_in[5]) << 16 |
-				    ((uint32_t)strm->next_in[6]) << 8 |
-				     (uint32_t)strm->next_in[7];
+				    ((uint64_t)strm->next_in[7]) << 56 |
+				    ((uint64_t)strm->next_in[6]) << 48 |
+				    ((uint64_t)strm->next_in[5]) << 40 |
+				    ((uint64_t)strm->next_in[4]) << 32 |
+				    ((uint32_t)strm->next_in[3]) << 24 |
+				    ((uint32_t)strm->next_in[2]) << 16 |
+				    ((uint32_t)strm->next_in[1]) << 8 |
+				     (uint32_t)strm->next_in[0];
 				strm->next_in += 8;
 				strm->avail_in -= 8;
 				br->cache_avail += 8 * 8;
 				return (1);
 			case 7:
-				br->cache_buffer =
-		 		   (br->cache_buffer << 56) |
-				    ((uint64_t)strm->next_in[0]) << 48 |
-				    ((uint64_t)strm->next_in[1]) << 40 |
-				    ((uint64_t)strm->next_in[2]) << 32 |
-				    ((uint32_t)strm->next_in[3]) << 24 |
-				    ((uint32_t)strm->next_in[4]) << 16 |
-				    ((uint32_t)strm->next_in[5]) << 8 |
-				     (uint32_t)strm->next_in[6];
+			{
+				const int d = br->cache_avail & 7;
+				br->cache_buffer |=
+				    ((uint64_t)strm->next_in[6]) << (56 - d) |
+				    ((uint64_t)strm->next_in[5]) << (48 - d) |
+				    ((uint64_t)strm->next_in[4]) << (40 - d) |
+				    ((uint64_t)strm->next_in[3]) << (32 - d) |
+				    ((uint32_t)strm->next_in[2]) << (24 - d) |
+				    ((uint32_t)strm->next_in[1]) << (16 - d) |
+				    ((uint32_t)strm->next_in[0]) << (8 - d)
 				strm->next_in += 7;
 				strm->avail_in -= 7;
 				br->cache_avail += 7 * 8;
 				return (1);
+			}
 			case 6:
-				br->cache_buffer =
-		 		   (br->cache_buffer << 48) |
-				    ((uint64_t)strm->next_in[0]) << 40 |
-				    ((uint64_t)strm->next_in[1]) << 32 |
-				    ((uint32_t)strm->next_in[2]) << 24 |
-				    ((uint32_t)strm->next_in[3]) << 16 |
-				    ((uint32_t)strm->next_in[4]) << 8 |
-				     (uint32_t)strm->next_in[5];
+			{
+				const int d = br->cache_avail & 7;
+				br->cache_buffer |=
+				    ((uint64_t)strm->next_in[5]) << (48 - d) |
+				    ((uint64_t)strm->next_in[4]) << (40 - d) |
+				    ((uint64_t)strm->next_in[3]) << (32 - d) |
+				    ((uint32_t)strm->next_in[2]) << (24 - d) |
+				    ((uint32_t)strm->next_in[1]) << (16 - d) |
+				    ((uint64_t)strm->next_in[0]) << (8 - d);
 				strm->next_in += 6;
 				strm->avail_in -= 6;
 				br->cache_avail += 6 * 8;
 				return (1);
+			}
 			case 0:
 				/* We have enough compressed data in
 				 * the cache buffer.*/
@@ -3226,12 +3247,24 @@ laz_br_fillup(struct laz_stream *strm, struct laz_br *br)
 			 * cache buffer. */
 			return (0);
 		}
-		br->cache_buffer =
-		   (br->cache_buffer << 8) | *strm->next_in++;
+		br->cache_buffer |= (*strm->next_in++) << (CACHE_BITS - n);
 		strm->avail_in--;
 		br->cache_avail += 8;
 		n -= 8;
 	}
+}
+
+void
+laz_br_put_back(struct laz_stream *strm, struct laz_br *br)
+{
+	int n = br->cache_avail >> 3;
+
+	if (n > 0) {
+		strm->next_in -= n;
+		strm->avail_in += n;
+		br->cache_avail &= 7;
+	}
+	br->cache_buffer &= cache_masks[br->cache_avail];
 }
 
 /*
@@ -3252,6 +3285,8 @@ laz_br_fillup(struct laz_stream *strm, struct laz_br *br)
 static int	laz_read_blocks(struct laz_stream *, int);
 static int	la_inflate_blocks(struct laz_stream *, int);
 #define ST_RD_BLOCK		0
+#define ST_STORED_BLOCK		0
+#define ST_COPY_BLOCK		0
 #define ST_RD_PT_1		1
 #define ST_RD_PT_2		2
 #define ST_RD_PT_3		3
@@ -3295,7 +3330,7 @@ laz_emit_window(struct laz_stream *strm, size_t s)
 }
 
 static int
-laz_read_blocks(struct laz_stream *strm)
+laz_read_blocks(struct laz_stream *strm, int last)
 {
 	struct laz_dec *ds = strm->ds;
 	struct laz_br *br = &(ds->br);
@@ -3306,6 +3341,7 @@ laz_read_blocks(struct laz_stream *strm)
 		switch (ds->state) {
 		case ST_RD_BLOCK:
 			if (ds->last_block) {
+				laz_br_consume_unaligned_bits(br);
 				if (ds->w_pos > 0) {
 					laz_emit_window(strm, ds->w_pos);
 					ds->w_pos = 0;
@@ -3323,9 +3359,85 @@ laz_read_blocks(struct laz_stream *strm)
 			 * the beginning of the decompression.
 			 */
 			if (!laz_br_read_ahead(strm, br, 3)) {
-				/* We need following data. */
-				return (ARCHIVE_OK);
+				if (!last)
+					/* We need following data. */
+					return (ARCHIVE_OK);
+				goto failed;
 			}
+			ds->last_block = laz_br_bits(br, 1);
+			laz_br_consume(br, 1);
+			switch (laz_br_bits(br, 2)) {
+			case 0:
+				ds->state = ST_STORED_BLOCK;
+				break;
+			case 1:
+				ds->state = ST_RD_LEN;
+				break;
+			case 2:
+				ds->state = ST_RD_TABLE;
+				break;
+			case 3:
+				/* Invalid block type. */
+				goto failed;
+			}
+			laz_br_consume(br, 2);
+			break;
+		case ST_STORED_BLOCK:
+			laz_br_consume_unaligned_bits(br);
+			if (!laz_br_read_ahead(strm, br, 32)) {
+				if (!last)
+					/* We need following data. */
+					return (ARCHIVE_OK);
+				goto failed;
+			}
+			if (laz_br_bits(br, 16) !=
+			    (((laz_br_bits(br, 16) >> 16) ^ 0xffff) & 0xffff))
+				goto failed;
+			d->copy_len = laz_br_bits(br, 16);
+			laz_br_consume(br, 32);
+			laz_br_put_back(strm, br);
+			laz_br_reset(br);
+			ds->state = ST_COPY_BLOCK;
+			break;
+		case ST_COPY_BLOCK:
+		{
+			int copy_len = ds->copy_len;
+			unsigned char *w_buff = ds->w_buff;
+			int w_pos = ds->w_pos;
+			int w_size = ds->w_size;
+			int avail_in = strm->avail_in;
+			unsigned char next_in = strm->next_in;
+			/*
+			 * Copy `copy_len' bytes as extracted data from
+			 * the window into the output buffer.
+			 */
+			while (avail_in >= 0 && copy_len >= 0) {
+				int l = copy_len;
+
+				if (l > w_size - w_pos)
+					l = w_size - w_pos;
+				if (l > avail_in)
+					l = avail_in;
+				memcpy(w_buff + w_pos, next_in, l);
+				w_pos += l;
+				copy_len -= l;
+				avail_in -= l;
+				next_in += l;
+				if (w_pos == w_size) {
+					w_pos = 0;
+					laz_emit_window(strm, w_size);
+					break;
+				}
+			}
+			ds->copy_len = copy_len;
+			ds->w_pos = w_pos;
+			strm->avail_in = avail_in;
+			strm->next_in = next_in;
+			if (copy_len <= 0)
+				ds->state = ST_RD_BLOCK;
+			break;
+
+
 			ds->blocks_avail = laz_br_bits(br, 16);
 			if (ds->blocks_avail == 0)
 				goto failed;
@@ -3337,6 +3449,7 @@ laz_read_blocks(struct laz_stream *strm)
 			ds->pt.len_size = ds->literal_pt_len_size;
 			ds->pt.len_bits = ds->literal_pt_len_bits;
 			ds->reading_position = 0;
+		}
 			/* FALL THROUGH */
 		case ST_RD_PT_1:
 			/* Note: ST_RD_PT_1, ST_RD_PT_2 and ST_RD_PT_4 are
